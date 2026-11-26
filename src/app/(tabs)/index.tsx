@@ -110,6 +110,7 @@ export default function HistoryScreen() {
         `${summary.duplicateCount} Duplikate übersprungen`,
         `${summary.uncategorizedCount} nicht kategorisiert`,
       ];
+      if (summary.aliasedCount) lines.push(`${summary.aliasedCount} mit eigenem Namen von früheren Buchungen`);
       if (summary.errorCount) lines.push(`${summary.errorCount} Zeilen nicht lesbar`);
       Alert.alert(
         'Import abgeschlossen',

@@ -278,4 +278,19 @@ describe('Repository', () => {
     expect(after.alias).toBeNull();
     expect(after.categoryId).toBe(tx.categoryId);
   });
+
+  it('übernimmt beim Import den eigenen Namen passender früherer Buchungen', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const oct = (await getTransactions(db)).find((t) => t.counterparty === 'Spotify AB' && t.bookingDate === '2026-10-02')!;
+    await learnRuleFromCorrection(db, 'Musik-Abo', 'leisure');
+    await setTransactionAlias(db, oct.id, 'Musik-Abo');
+
+    const summary = await importParsedCsv(db, ACCOUNT_GIRO, 'b.csv', sample('ing-beispiel-okt-nov-ueberlappend.csv'));
+    expect(summary.aliasedCount).toBe(1);
+    const nov = (await getTransactions(db)).find((t) => t.counterparty === 'Spotify AB' && t.bookingDate === '2026-11-02')!;
+    expect(nov.alias).toBe('Musik-Abo');
+    expect(nov.categoryId).toBe('leisure');
+    // andere neue Buchungen bleiben ohne Namen
+    expect((await getTransactions(db)).filter((t) => t.alias).map((t) => t.bookingDate).sort()).toEqual(['2026-10-02', '2026-11-02']);
+  });
 });

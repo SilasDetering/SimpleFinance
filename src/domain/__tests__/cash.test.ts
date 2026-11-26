@@ -1,4 +1,4 @@
-import { cashBalance, cashEffect, incomeExpense, toLookup, type LedgerEntry } from '../cash';
+import { cashBalance, cashBreakdown, cashEffect, incomeExpense, toLookup, type LedgerEntry } from '../cash';
 import { DEFAULT_CATEGORIES } from '../defaults';
 import { ACCOUNT_CASH, ACCOUNT_GIRO } from '../types';
 
@@ -85,5 +85,39 @@ describe('incomeExpense', () => {
 
   it('nicht kategorisierte Buchungen zählen als Sonstiges (Ausgabe)', () => {
     expect(incomeExpense([bank(-1750, null)], lookup).expenseCents).toBe(1750);
+  });
+});
+
+describe('cashBreakdown', () => {
+  it('schlüsselt den Bestand nach Art auf und führt einen laufenden Bestand', () => {
+    const entries = [
+      cash(-800, 'groceries', '2026-11-12'),
+      bank(-10000, 'cash', '2026-11-01'),
+      bank(-4500, 'groceries', '2026-11-02'), // normale Kartenzahlung: keine Bargeld-Bewegung
+      cash(2000, 'income', '2026-11-05'),
+      bank(3000, 'cash', '2026-11-20'),
+    ];
+    const b = cashBreakdown(entries);
+    expect(b.totals).toEqual({
+      withdrawal: { cents: 10000, count: 1 },
+      received: { cents: 2000, count: 1 },
+      spent: { cents: 800, count: 1 },
+      deposit: { cents: 3000, count: 1 },
+    });
+    expect(b.balanceCents).toBe(cashBalance(entries));
+    expect(b.balanceCents).toBe(10000 + 2000 - 800 - 3000);
+    // neueste zuerst, Bestand jeweils nach der Bewegung
+    expect(b.movements.map((m) => [m.kind, m.effectCents, m.balanceAfterCents])).toEqual([
+      ['deposit', -3000, 8200],
+      ['spent', -800, 11200],
+      ['received', 2000, 12000],
+      ['withdrawal', 10000, 10000],
+    ]);
+  });
+
+  it('ist leer ohne Bargeld-Bewegungen', () => {
+    const b = cashBreakdown([bank(-4500, 'groceries')]);
+    expect(b.movements).toHaveLength(0);
+    expect(b.balanceCents).toBe(0);
   });
 });

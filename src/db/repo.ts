@@ -13,6 +13,7 @@ import {
   type RuleField,
   type Transaction,
 } from '@/domain/types';
+import { findAlias } from '@/domain/alias';
 import { newId } from './id';
 import { seedDefaultCategories } from './schema';
 
@@ -298,6 +299,8 @@ export interface ImportSummary {
   newCount: number;
   duplicateCount: number;
   uncategorizedCount: number;
+  /** Buchungen, die automatisch einen eigenen Namen von einer früheren Buchung bekommen haben */
+  aliasedCount: number;
   errorCount: number;
   periodFrom: string | null;
   periodTo: string | null;
@@ -315,6 +318,13 @@ export async function importParsedCsv(
   );
   const { fresh, duplicates } = splitDuplicates(accountId, parsed.transactions, new Set(existing.map((r) => r.dedup_key)));
   const rules = sortRules(await getRules(db));
+  const templates = (
+    await db.getAllAsync<{ counterparty: string; purpose: string; amount_cents: number; alias: string; booking_date: string }>(
+      "SELECT counterparty, purpose, amount_cents, alias, booking_date FROM transactions WHERE account_id = ? AND alias IS NOT NULL AND alias != ''",
+      accountId,
+    )
+  ).map((r) => ({ counterparty: r.counterparty, purpose: r.purpose, amountCents: r.amount_cents, alias: r.alias, bookingDate: r.booking_date }));
+  let aliased = 0;
   const importId = newId();
   const now = new Date().toISOString();
   let uncategorized = 0;
@@ -332,13 +342,15 @@ export async function importParsedCsv(
       await db.runAsync('UPDATE accounts SET iban = COALESCE(iban, ?) WHERE id = ?', parsed.meta.iban, accountId);
     }
     for (const { tx, key } of fresh) {
-      const categoryId = categorize(tx, rules, { presorted: true });
+      const alias = templates.length ? findAlias(tx, templates) : null;
+      if (alias) aliased++;
+      const categoryId = categorize({ ...tx, alias }, rules, { presorted: true });
       if (!categoryId) uncategorized++;
       await db.runAsync(
-        `INSERT INTO transactions (id, account_id, booking_date, value_date, counterparty, booking_text, purpose, amount_cents,
+        `INSERT INTO transactions (id, account_id, booking_date, value_date, counterparty, alias, booking_text, purpose, amount_cents,
            balance_cents, category_id, category_manual, note, source, import_id, dedup_key, day_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 'csv', ?, ?, ?, ?)`,
-        newId(), accountId, tx.bookingDate, tx.valueDate, tx.counterparty, tx.bookingText, tx.purpose,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 'csv', ?, ?, ?, ?)`,
+        newId(), accountId, tx.bookingDate, tx.valueDate, tx.counterparty, alias, tx.bookingText, tx.purpose,
         tx.amountCents, tx.balanceCents, categoryId, importId, key, tx.dayOrder, now,
       );
     }
@@ -348,6 +360,7 @@ export async function importParsedCsv(
     newCount: fresh.length,
     duplicateCount: duplicates,
     uncategorizedCount: uncategorized,
+    aliasedCount: aliased,
     errorCount: parsed.errors.length,
     periodFrom,
     periodTo,
