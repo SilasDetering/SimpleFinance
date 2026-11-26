@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { cashBalance, toLookup, type CategoryLookup } from '@/domain/cash';
 import { ACCOUNT_GIRO, type Category, type Rule, type Transaction } from '@/domain/types';
 import type { PromptExclusion } from '@/domain/categorize';
@@ -34,7 +34,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [promptExclusions, setPromptExclusions] = useState<PromptExclusion[]>([]);
   const [bankBalance, setBankBalance] = useState<DataState['bankBalance']>(null);
 
+  // Laufen zwei Ladevorgänge gleichzeitig (z. B. Kategorie geändert und direkt Regel angelegt),
+  // darf der ältere nicht nach dem neueren fertig werden und frische Daten überschreiben
+  const latestLoad = useRef(0);
+
   const reload = useCallback(async () => {
+    const load = ++latestLoad.current;
     const [tx, cats, rs, bal, excl] = await Promise.all([
       getTransactions(db),
       getCategories(db),
@@ -42,6 +47,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       getBankBalance(db, ACCOUNT_GIRO),
       getPromptExclusions(db),
     ]);
+    if (load !== latestLoad.current) return;
     setPromptExclusions(excl);
     setTransactions(tx);
     setCategories(cats);
@@ -54,21 +60,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     reload();
   }, [reload]);
 
-  const value = useMemo<DataState>(() => {
-    const categoryById = new Map(categories.map((c) => [c.id, c]));
-    return {
+  // Getrennt memoisiert: Ändern sich nur Buchungen, bleiben Kategorie-Map und Lookup dieselben Objekte
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const lookup = useMemo(() => toLookup(categories), [categories]);
+  const cashBalanceCents = useMemo(() => cashBalance(transactions), [transactions]);
+
+  const value = useMemo<DataState>(
+    () => ({
       loading,
       transactions,
       categories,
       categoryById,
-      lookup: toLookup(categories),
+      lookup,
       rules,
       promptExclusions,
       bankBalance,
-      cashBalanceCents: cashBalance(transactions),
+      cashBalanceCents,
       reload,
-    };
-  }, [loading, transactions, categories, rules, promptExclusions, bankBalance, reload]);
+    }),
+    [loading, transactions, categories, categoryById, lookup, rules, promptExclusions, bankBalance, cashBalanceCents, reload],
+  );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

@@ -128,12 +128,13 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   let version = row?.user_version ?? 0;
   while (version < MIGRATIONS.length) {
     const step = MIGRATIONS[version];
+    const next = version + 1;
+    // Versionsnummer in derselben Transaktion setzen: bricht die App mittendrin ab,
+    // wird die Migration beim nächsten Start vollständig wiederholt statt halb übersprungen
     await db.withTransactionAsync(async () => {
       await step(db);
+      await db.execAsync(`PRAGMA user_version = ${next}`);
     });
-    version++;
-    await db.execAsync(`PRAGMA user_version = ${version}`);
+    version = next;
   }
 }
-
-export const SCHEMA_VERSION = MIGRATIONS.length;

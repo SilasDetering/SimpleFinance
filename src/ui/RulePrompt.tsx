@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { fieldText, findConflictingRules, matchesKeyword, suggestKeyword } from '@/domain/categorize';
 import type { Category, RuleField, Transaction } from '@/domain/types';
@@ -28,6 +28,8 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
   const [keyword, setKeyword] = useState('');
   const [field, setField] = useState<'counterparty' | 'any'>('counterparty');
   const [saving, setSaving] = useState(false);
+  // Sperre gegen doppeltes Antippen, bevor `saving` gerendert ist
+  const busy = useRef(false);
 
   // Anfrage merken und erst zeigen, wenn die Kategorie-Auswahl ganz geschlossen ist
   const [pending, setPending] = useState<{ tx: Transaction; category: Category } | null>(null);
@@ -63,13 +65,15 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
   );
 
   const create = async () => {
-    if (!state || keyword.trim().length < 2) return;
+    if (!state || keyword.trim().length < 2 || busy.current) return;
+    busy.current = true;
     setSaving(true);
     try {
       await learnRuleFromCorrection(db, keyword.trim(), state.category.id, field as RuleField, conflicts.map((r) => r.id));
       await reload();
       close();
     } finally {
+      busy.current = false;
       setSaving(false);
     }
   };
@@ -78,10 +82,15 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
   const excludeName = state ? suggestKeyword(state.tx.counterparty) : '';
 
   const neverAsk = async () => {
-    if (!state) return;
-    await addPromptExclusion(db, excludeName);
-    await reload();
-    close();
+    if (!state || busy.current) return;
+    busy.current = true;
+    try {
+      await addPromptExclusion(db, excludeName);
+      await reload();
+      close();
+    } finally {
+      busy.current = false;
+    }
   };
 
   return (

@@ -39,11 +39,6 @@ export function categoryTypeOf(entry: LedgerEntry, lookup: CategoryLookup): Cate
   return lookup.get(effectiveCategoryId(entry))?.type ?? 'expense';
 }
 
-/** Zählt die Buchung in Auswertungen (Einnahmen/Ausgaben)? Umbuchungen und Bargeld-Bewegungen nicht. */
-export function countsInStats(entry: LedgerEntry, lookup: CategoryLookup): boolean {
-  return categoryTypeOf(entry, lookup) !== 'transfer';
-}
-
 /** Wirkung einer Buchung auf die Bargeld-Kasse in Cent. */
 export function cashEffect(entry: LedgerEntry): number {
   if (entry.accountId === ACCOUNT_CASH) return entry.amountCents;

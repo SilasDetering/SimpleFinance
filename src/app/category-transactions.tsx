@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { formatMonth, formatMonthShort } from '@/domain/dates';
@@ -41,6 +41,22 @@ export default function CategoryTransactionsScreen() {
   const mag = 10 ** Math.floor(Math.log10(rawStep));
   const stepValue = ([1, 2, 5, 10].find((f) => f * mag >= rawStep) ?? 10) * mag;
   const sections = Math.max(1, Math.ceil(peak / stepValue));
+  const openTransaction = useCallback(
+    (tx: Transaction) => router.push({ pathname: '/transaction/[id]', params: { id: tx.id } }),
+    [],
+  );
+  const renderItem = useCallback(
+    ({ item }: { item: Transaction }) => (
+      <TransactionRow
+        tx={item}
+        category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
+        onPress={openTransaction}
+        onPressCategory={setPickerTx}
+      />
+    ),
+    [categoryById, openTransaction],
+  );
+
   const barData = series.map((m) => ({
     value: Math.max(0, m.cents) / 100,
     label: formatMonthShort(m.month),
@@ -96,14 +112,7 @@ export default function CategoryTransactionsScreen() {
             ) : null}
           </View>
         }
-        renderItem={({ item }) => (
-          <TransactionRow
-            tx={item}
-            category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
-            onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: item.id } })}
-            onPressCategory={() => setPickerTx(item)}
-          />
-        )}
+        renderItem={renderItem}
         ItemSeparatorComponent={Divider}
         ListEmptyComponent={
           <Text style={[font.body, { color: t.textMuted, textAlign: 'center', paddingVertical: space.xxl }]}>

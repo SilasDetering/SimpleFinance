@@ -1,8 +1,9 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '@/domain/defaults';
+import { LEARNED_PRIORITY } from '@/domain/categorize';
 import type { CategoryType, Rule, RuleField } from '@/domain/types';
 import { addRule, deleteCategory, deleteRule, recategorizeAll, saveCategory } from '@/db/repo';
 import { Button, Icon } from '@/ui/components';
@@ -39,6 +40,9 @@ export default function CategoryEditor() {
   const [keyword, setKeyword] = useState('');
   const [field, setField] = useState<RuleField>('any');
 
+  // Doppeltes Antippen von „Speichern" darf die Kategorie nicht zweimal anlegen
+  const saving = useRef(false);
+
   const usage = useMemo(() => transactions.filter((tx) => tx.categoryId === existing?.id).length, [transactions, existing]);
 
   const addKeyword = () => {
@@ -48,7 +52,7 @@ export default function CategoryEditor() {
       setKeyword('');
       return;
     }
-    setDraftRules((rs) => [...rs, { keyword: k, field, priority: field === 'counterparty' ? 10 : existing?.isSystem ? 100 : 0 }]);
+    setDraftRules((rs) => [...rs, { keyword: k, field, priority: field === 'counterparty' ? LEARNED_PRIORITY : existing?.isSystem ? 100 : 0 }]);
     setKeyword('');
   };
 
@@ -57,13 +61,21 @@ export default function CategoryEditor() {
       Alert.alert('Name fehlt', 'Bitte gib der Kategorie einen Namen.');
       return;
     }
-    const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type });
-    const keep = new Set(draftRules.filter((r) => r.id).map((r) => r.id));
-    for (const r of initialRules) if (r.id && !keep.has(r.id)) await deleteRule(db, r.id);
-    for (const r of draftRules) if (!r.id) await addRule(db, { categoryId, keyword: r.keyword, field: r.field, priority: r.priority });
-    await recategorizeAll(db);
-    await reload();
-    router.back();
+    if (saving.current) return;
+    saving.current = true;
+    try {
+      const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type });
+      const keep = new Set(draftRules.filter((r) => r.id).map((r) => r.id));
+      for (const r of initialRules) if (r.id && !keep.has(r.id)) await deleteRule(db, r.id);
+      for (const r of draftRules) if (!r.id) await addRule(db, { categoryId, keyword: r.keyword, field: r.field, priority: r.priority });
+      await recategorizeAll(db);
+      // Erst zurück, dann neu laden: sonst blitzt bei einer neuen Kategorie kurz der alte Stand auf
+      router.back();
+      await reload();
+    } catch (e) {
+      saving.current = false;
+      Alert.alert('Speichern fehlgeschlagen', e instanceof Error ? e.message : String(e));
+    }
   };
 
   const remove = () => {
@@ -79,8 +91,9 @@ export default function CategoryEditor() {
           onPress: async () => {
             try {
               await deleteCategory(db, existing.id);
-              await reload();
+              // Erst zurück, dann neu laden: sonst blitzt kurz „Kategorie nicht gefunden" auf
               router.back();
+              await reload();
             } catch (e) {
               Alert.alert('Nicht möglich', e instanceof Error ? e.message : String(e));
             }

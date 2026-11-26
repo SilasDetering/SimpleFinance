@@ -22,22 +22,23 @@ export const TransactionRow = memo(function TransactionRow({
 }: {
   tx: Transaction;
   category: Category | undefined;
-  onPress: () => void;
-  onPressCategory: () => void;
+  /** Bekommt die Buchung übergeben, damit die Liste stabile Callbacks reichen kann (memo greift) */
+  onPress: (tx: Transaction) => void;
+  onPressCategory: (tx: Transaction) => void;
 }) {
   const t = useTheme();
   const isCash = tx.accountId === ACCOUNT_CASH;
   // Umbuchungen und Bargeld-Bewegungen zählen nicht als Ein-/Ausgabe -> dezent darstellen
   const isTransfer = tx.categoryId === CATEGORY_CASH || category?.type === 'transfer';
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
+    <Pressable onPress={() => onPress(tx)} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
       <CategoryBadge category={category} />
       <View style={styles.middle}>
         <Text style={[font.body, { color: t.text }]} numberOfLines={1}>
           {displayTitle(tx)}
         </Text>
         <View style={styles.meta}>
-          <CategoryChip category={category} onPress={onPressCategory} />
+          <CategoryChip category={category} onPress={() => onPressCategory(tx)} />
           {isCash ? (
             <View style={[styles.tag, { borderColor: t.border }]}>
               <Text style={[font.caption, { color: t.textMuted }]}>Bar</Text>

@@ -33,12 +33,17 @@ export default function InsightsScreen() {
   const latest = months[months.length - 1];
   // Ohne explizite Auswahl wird automatisch der neueste Monat gezeigt
   const [chosen, setPeriod] = useState<Period | null>(null);
-  const period: Period =
-    chosen && (chosen.kind === 'all' || months.includes(chosen.month))
-      ? chosen
-      : latest
-        ? { kind: 'month', month: latest }
-        : { kind: 'all' };
+  // Memoisiert, damit die Auswertungen unten nicht bei jedem Render (z. B. jedem Ziehen
+  // über das Donut) neu berechnet werden, nur weil `period` ein neues Objekt ist
+  const period = useMemo<Period>(
+    () =>
+      chosen && (chosen.kind === 'all' || months.includes(chosen.month))
+        ? chosen
+        : latest
+          ? { kind: 'month', month: latest }
+          : { kind: 'all' },
+    [chosen, months, latest],
+  );
   const [barMonths, setBarMonths] = useState<6 | 12>(6);
   const [showAllRecurring, setShowAllRecurring] = useState(false);
   // Im Donut ausgewählte Kategorie (per Antippen oder Ziehen)
@@ -94,6 +99,86 @@ export default function InsightsScreen() {
     [transactions],
   );
 
+  const chartWidth = width - space.lg * 4 - 40;
+  const pieValues = useMemo(() => byCategory.map((c) => c.cents), [byCategory]);
+  const pieColors = useMemo(
+    () => byCategory.map((c) => categoryById.get(c.categoryId)?.color ?? t.textFaint),
+    [byCategory, categoryById, t],
+  );
+  const selectedIndex = selectedCat ? byCategory.findIndex((c) => c.categoryId === selectedCat) : -1;
+  const selectedShare = selectedIndex >= 0 ? byCategory[selectedIndex] : null;
+  const catName = (id: string) => categoryById.get(id)?.name ?? (id === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt');
+
+  // Diagramme als memoisierte Elemente: Antippen/Ziehen am Donut rendert sie nicht neu
+  const barChart = useMemo(() => {
+    const barData = bars.flatMap((b) => [
+      {
+        value: b.incomeCents / 100,
+        frontColor: t.income,
+        spacing: 3,
+        label: formatMonthShort(b.month),
+        labelWidth: 34,
+        labelTextStyle: { color: t.textMuted, fontSize: 11 },
+      },
+      { value: b.expenseCents / 100, frontColor: t.dark ? '#5B6270' : '#C7CCD4' },
+    ]);
+    const barGroupWidth = Math.max(8, Math.floor((chartWidth - bars.length * 14) / (bars.length * 2)));
+    return (
+      <BarChart
+        data={barData}
+        barWidth={barGroupWidth}
+        spacing={14}
+        initialSpacing={6}
+        width={chartWidth}
+        height={160}
+        noOfSections={3}
+        barBorderRadius={3}
+        yAxisThickness={0}
+        xAxisThickness={0}
+        rulesColor={t.border}
+        yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
+        formatYLabel={formatAxisLabel}
+        yAxisLabelWidth={40}
+        disableScroll
+        isAnimated={false}
+      />
+    );
+  }, [bars, chartWidth, t]);
+
+  const lineChart = useMemo(() => {
+    const step2 = Math.max(1, Math.ceil(balance.length / 60));
+    const lineData = balance.filter((_, i) => i % step2 === 0 || i === balance.length - 1).map((p) => ({ value: p.cents / 100 }));
+    if (lineData.length <= 1) return null;
+    const lineMin = Math.min(...lineData.map((d) => d.value), 0);
+    return (
+      <LineChart
+        data={lineData}
+        areaChart
+        hideDataPoints
+        thickness={2}
+        color={t.accent}
+        startFillColor={t.accent}
+        endFillColor={t.accent}
+        startOpacity={0.2}
+        endOpacity={0.01}
+        width={chartWidth}
+        height={150}
+        adjustToWidth
+        initialSpacing={0}
+        noOfSections={3}
+        yAxisThickness={0}
+        xAxisThickness={0}
+        rulesColor={t.border}
+        yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
+        formatYLabel={formatAxisLabel}
+        yAxisLabelWidth={40}
+        mostNegativeValue={lineMin < 0 ? lineMin : undefined}
+        disableScroll
+        isAnimated={false}
+      />
+    );
+  }, [balance, chartWidth, t]);
+
   if (transactions.length === 0) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
@@ -106,27 +191,6 @@ export default function InsightsScreen() {
     );
   }
 
-  const chartWidth = width - space.lg * 4 - 40;
-  const pieValues = byCategory.map((c) => c.cents);
-  const pieColors = byCategory.map((c) => categoryById.get(c.categoryId)?.color ?? t.textFaint);
-  const selectedIndex = selectedCat ? byCategory.findIndex((c) => c.categoryId === selectedCat) : -1;
-  const selectedShare = selectedIndex >= 0 ? byCategory[selectedIndex] : null;
-  const catName = (id: string) => categoryById.get(id)?.name ?? (id === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt');
-  const barData = bars.flatMap((b) => [
-    {
-      value: b.incomeCents / 100,
-      frontColor: t.income,
-      spacing: 3,
-      label: formatMonthShort(b.month),
-      labelWidth: 34,
-      labelTextStyle: { color: t.textMuted, fontSize: 11 },
-    },
-    { value: b.expenseCents / 100, frontColor: t.dark ? '#5B6270' : '#C7CCD4' },
-  ]);
-  const barGroupWidth = Math.max(8, Math.floor((chartWidth - bars.length * 14) / (bars.length * 2)));
-  const step2 = Math.max(1, Math.ceil(balance.length / 60));
-  const lineData = balance.filter((_, i) => i % step2 === 0 || i === balance.length - 1).map((p) => ({ value: p.cents / 100 }));
-  const lineMin = Math.min(...lineData.map((d) => d.value), 0);
   const recurringShown = showAllRecurring ? recurring : recurring.slice(0, 4);
 
   return (
@@ -287,24 +351,7 @@ export default function InsightsScreen() {
           >
             Einnahmen vs. Ausgaben
           </SectionTitle>
-          <BarChart
-            data={barData}
-            barWidth={barGroupWidth}
-            spacing={14}
-            initialSpacing={6}
-            width={chartWidth}
-            height={160}
-            noOfSections={3}
-            barBorderRadius={3}
-            yAxisThickness={0}
-            xAxisThickness={0}
-            rulesColor={t.border}
-            yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
-            formatYLabel={(l: string) => formatCentsShort(Number(l) * 100).replace(' €', '')}
-            yAxisLabelWidth={40}
-            disableScroll
-            isAnimated={false}
-          />
+          {barChart}
           <View style={styles.legend}>
             <Legend color={t.income} label="Einnahmen" />
             <Legend color={t.dark ? '#5B6270' : '#C7CCD4'} label="Ausgaben" />
@@ -368,34 +415,10 @@ export default function InsightsScreen() {
         </Card>
 
         {/* Kontostand-Verlauf */}
-        {lineData.length > 1 ? (
+        {lineChart ? (
           <Card>
             <SectionTitle>Kontostand-Verlauf</SectionTitle>
-            <LineChart
-              data={lineData}
-              areaChart
-              hideDataPoints
-              thickness={2}
-              color={t.accent}
-              startFillColor={t.accent}
-              endFillColor={t.accent}
-              startOpacity={0.2}
-              endOpacity={0.01}
-              width={chartWidth}
-              height={150}
-              adjustToWidth
-              initialSpacing={0}
-              noOfSections={3}
-              yAxisThickness={0}
-              xAxisThickness={0}
-              rulesColor={t.border}
-              yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
-              formatYLabel={(l: string) => formatCentsShort(Number(l) * 100).replace(' €', '')}
-              yAxisLabelWidth={40}
-              mostNegativeValue={lineMin < 0 ? lineMin : undefined}
-              disableScroll
-              isAnimated={false}
-            />
+            {lineChart}
             <View style={[styles.legend, { justifyContent: 'space-between' }]}>
               <Text style={[font.small, { color: t.textFaint }]}>{formatDate(balance[0].date)}</Text>
               <Text style={[font.small, { color: t.textFaint }]}>{formatDate(balance[balance.length - 1].date)}</Text>
@@ -435,6 +458,8 @@ export default function InsightsScreen() {
     </SafeAreaView>
   );
 }
+
+const formatAxisLabel = (l: string) => formatCentsShort(Number(l) * 100).replace(' €', '');
 
 function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
   const t = useTheme();

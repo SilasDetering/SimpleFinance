@@ -65,6 +65,7 @@ export function matchesFilter(
   f: TransactionFilter,
   lookup: CategoryLookup,
   currentMonth: string,
+  range: { from: string; to: string } | null = resolvePeriod(f, currentMonth),
 ): boolean {
   if (f.kind !== 'all') {
     if (categoryTypeOf(entry, lookup) === 'transfer') return false;
@@ -75,7 +76,6 @@ export function matchesFilter(
     const id = entry.categoryId ?? UNCATEGORIZED;
     if (!f.categoryIds.includes(id)) return false;
   }
-  const range = resolvePeriod(f, currentMonth);
   if (range) {
     const m = monthKey(entry.bookingDate);
     if (m < range.from || m > range.to) return false;
@@ -90,7 +90,8 @@ export function filterTransactions<T extends LedgerEntry>(
   currentMonth: string,
 ): T[] {
   if (!isFilterActive(f)) return entries;
-  return entries.filter((e) => matchesFilter(e, f, lookup, currentMonth));
+  const range = resolvePeriod(f, currentMonth);
+  return entries.filter((e) => matchesFilter(e, f, lookup, currentMonth, range));
 }
 
 /**
