@@ -378,21 +378,29 @@ export default function InsightsScreen() {
         ) : null}
 
         {/* Bargeld */}
-        <Card>
-          <SectionTitle>Bargeld-Bestand</SectionTitle>
-          <Text style={[font.title, { color: cashBalanceCents < 0 ? t.warning : t.text }]}>{formatCents(cashBalanceCents)}</Text>
-          <Text style={[font.small, { color: t.textMuted, marginTop: 2 }]}>
-            Abhebungen minus Bar-Ausgaben und Einzahlungen. Zählt nicht zum Kontostand.
-          </Text>
-          {cashBalanceCents < 0 ? (
-            <View style={[styles.warning, { backgroundColor: t.warningBg }]}>
-              <Icon name="alert-circle-outline" size={18} color={t.warning} />
-              <Text style={[font.small, { color: t.warning, flex: 1 }]}>
-                Der Bestand ist negativ. Wahrscheinlich fehlt eine Abhebung oder erhaltenes Bargeld.
-              </Text>
-            </View>
-          ) : null}
-        </Card>
+        <Pressable
+          onPress={() => router.push('/cash')}
+          accessibilityRole="button"
+          accessibilityLabel="Bargeld-Bestand aufschlüsseln"
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <Card>
+            <SectionTitle right={<Icon name="chevron-forward" size={16} color={t.textFaint} />}>Bargeld-Bestand</SectionTitle>
+            <Text style={[font.title, { color: cashBalanceCents < 0 ? t.warning : t.text }]}>{formatCents(cashBalanceCents)}</Text>
+            <Text style={[font.small, { color: t.textMuted, marginTop: 2 }]}>
+              Abhebungen und erhaltenes Bargeld minus Bar-Ausgaben und Einzahlungen. Zählt nicht zum Kontostand.
+              Antippen für alle Buchungen dazu.
+            </Text>
+            {cashBalanceCents < 0 ? (
+              <View style={[styles.warning, { backgroundColor: t.warningBg }]}>
+                <Icon name="alert-circle-outline" size={18} color={t.warning} />
+                <Text style={[font.small, { color: t.warning, flex: 1 }]}>
+                  Der Bestand ist negativ. Wahrscheinlich fehlt eine Abhebung oder erhaltenes Bargeld.
+                </Text>
+              </View>
+            ) : null}
+          </Card>
+        </Pressable>
 
         <Text style={[font.small, { color: t.textFaint, textAlign: 'center' }]}>
           Umbuchungen und Bargeld-Abhebungen sind ausgeblendet. Bar-Ausgaben zählen in ihrer Kategorie.
