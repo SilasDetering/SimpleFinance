@@ -42,6 +42,8 @@ export default function InsightsScreen() {
   const [showAllRecurring, setShowAllRecurring] = useState(false);
   // Im Donut ausgewählte Kategorie (per Antippen oder Ziehen)
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  // Während der Finger auf dem Donut liegt, scrollt die Seite nicht mit
+  const [chartGesture, setChartGesture] = useState(false);
 
   const monthIndex = period.kind === 'month' ? months.indexOf(period.month) : -1;
   const canPrev = period.kind === 'month' && monthIndex > 0;
@@ -127,7 +129,11 @@ export default function InsightsScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.lg }} {...pan.panHandlers}>
+      <ScrollView
+        scrollEnabled={!chartGesture}
+        contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.lg }}
+        {...pan.panHandlers}
+      >
         {/* Zeitraum-Auswahl */}
         <View style={styles.periodRow}>
           <Pressable onPress={() => step(-1)} disabled={!canPrev} hitSlop={10} style={{ opacity: canPrev ? 1 : 0.25 }} accessibilityLabel="Vorheriger Monat">
@@ -181,7 +187,9 @@ export default function InsightsScreen() {
                   gapColor={t.surface}
                   selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
                   onSelect={(i) => setSelectedCat(i === null ? null : byCategory[i]?.categoryId ?? null)}
+                  onGestureActive={setChartGesture}
                   onPressCenter={() => (selectedShare ? openCategory(selectedShare.categoryId) : undefined)}
+                  onPressSelected={() => setSelectedCat(null)}
                 >
                   {selectedShare ? (
                     <>
@@ -198,9 +206,6 @@ export default function InsightsScreen() {
                     </>
                   )}
                 </DonutChart>
-                <Text style={[font.small, { color: t.textFaint, marginTop: space.sm }]}>
-                  {selectedShare ? 'Mitte antippen für die Einzelposten' : 'Antippen oder mit dem Finger entlangfahren'}
-                </Text>
               </View>
               {byCategory.map((c) => {
                 const cat = categoryById.get(c.categoryId);
