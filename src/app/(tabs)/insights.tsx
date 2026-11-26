@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { incomeExpense } from '@/domain/cash';
 import { formatDate, formatMonth, formatMonthShort } from '@/domain/dates';
@@ -21,6 +21,7 @@ import {
 import { ACCOUNT_GIRO, CATEGORY_OTHER } from '@/domain/types';
 import { Card, CategoryBadge, Divider, Icon, SectionTitle } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
+import { DonutChart } from '@/ui/DonutChart';
 import { font, radius, space, useTheme } from '@/ui/theme';
 
 export default function InsightsScreen() {
@@ -39,6 +40,8 @@ export default function InsightsScreen() {
         : { kind: 'all' };
   const [barMonths, setBarMonths] = useState<6 | 12>(6);
   const [showAllRecurring, setShowAllRecurring] = useState(false);
+  // Im Donut ausgewählte Kategorie (per Antippen oder Ziehen)
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
 
   const monthIndex = period.kind === 'month' ? months.indexOf(period.month) : -1;
   const canPrev = period.kind === 'month' && monthIndex > 0;
@@ -101,10 +104,11 @@ export default function InsightsScreen() {
   }
 
   const chartWidth = width - space.lg * 4 - 40;
-  const pieData = byCategory.map((c) => ({
-    value: c.cents,
-    color: categoryById.get(c.categoryId)?.color ?? t.textFaint,
-  }));
+  const pieValues = byCategory.map((c) => c.cents);
+  const pieColors = byCategory.map((c) => categoryById.get(c.categoryId)?.color ?? t.textFaint);
+  const selectedIndex = selectedCat ? byCategory.findIndex((c) => c.categoryId === selectedCat) : -1;
+  const selectedShare = selectedIndex >= 0 ? byCategory[selectedIndex] : null;
+  const catName = (id: string) => categoryById.get(id)?.name ?? (id === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt');
   const barData = bars.flatMap((b) => [
     {
       value: b.incomeCents / 100,
@@ -174,34 +178,52 @@ export default function InsightsScreen() {
           ) : (
             <>
               <View style={{ alignItems: 'center', paddingVertical: space.md }}>
-                <PieChart
-                  data={pieData}
-                  donut
-                  radius={88}
-                  innerRadius={64}
-                  innerCircleColor={t.surface}
-                  strokeWidth={2}
-                  strokeColor={t.surface}
-                  centerLabelComponent={() => (
-                    <View style={{ alignItems: 'center' }}>
+                <DonutChart
+                  values={pieValues}
+                  colors={pieColors}
+                  gapColor={t.surface}
+                  selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
+                  onSelect={(i) => setSelectedCat(i === null ? null : byCategory[i]?.categoryId ?? null)}
+                  onPressCenter={() => (selectedShare ? openCategory(selectedShare.categoryId) : undefined)}
+                >
+                  {selectedShare ? (
+                    <>
+                      <Text style={[font.caption, { color: t.textMuted, textAlign: 'center' }]} numberOfLines={1}>
+                        {catName(selectedShare.categoryId)}
+                      </Text>
+                      <Text style={[font.bodyStrong, { color: t.text }]}>{formatCentsShort(selectedShare.cents)}</Text>
+                      <Text style={[font.small, { color: t.textMuted }]}>{formatPercent(selectedShare.share)}</Text>
+                    </>
+                  ) : (
+                    <>
                       <Text style={[font.caption, { color: t.textMuted }]}>Ausgaben</Text>
                       <Text style={[font.bodyStrong, { color: t.text }]}>{formatCentsShort(totals.expenseCents)}</Text>
-                    </View>
+                    </>
                   )}
-                />
+                </DonutChart>
+                <Text style={[font.small, { color: t.textFaint, marginTop: space.sm }]}>
+                  {selectedShare ? 'Mitte antippen für die Einzelposten' : 'Antippen oder mit dem Finger entlangfahren'}
+                </Text>
               </View>
               {byCategory.map((c) => {
                 const cat = categoryById.get(c.categoryId);
+                const isSelected = c.categoryId === selectedCat;
                 return (
                   <Pressable
                     key={c.categoryId}
                     onPress={() => openCategory(c.categoryId)}
-                    style={({ pressed }) => [styles.catRow, { opacity: pressed ? 0.6 : 1 }]}
+                    style={({ pressed }) => [
+                      styles.catRow,
+                      styles.catRowSelectable,
+                      { opacity: pressed ? 0.6 : selectedCat && !isSelected ? 0.45 : 1 },
+                      isSelected && { backgroundColor: `${cat?.color ?? t.textFaint}22` },
+                    ]}
                     accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
                   >
                     <View style={[styles.dot, { backgroundColor: cat?.color ?? t.textFaint }]} />
-                    <Text style={[font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
-                      {cat?.name ?? (c.categoryId === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt')}
+                    <Text style={[isSelected ? font.bodyStrong : font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
+                      {catName(c.categoryId)}
                     </Text>
                     <Text style={[font.small, { color: t.textMuted, width: 48, textAlign: 'right' }]}>{formatPercent(c.share)}</Text>
                     <Text style={[font.bodyStrong, { color: t.text, minWidth: 88, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>
@@ -436,6 +458,7 @@ const styles = StyleSheet.create({
   segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm },
   kpis: { flexDirection: 'row', gap: space.lg },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8 },
+  catRowSelectable: { marginHorizontal: -space.sm, paddingHorizontal: space.sm, borderRadius: radius.md },
   dot: { width: 10, height: 10, borderRadius: 5 },
   legend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   warning: { flexDirection: 'row', gap: space.sm, alignItems: 'center', padding: space.md, borderRadius: radius.md, marginTop: space.md },
