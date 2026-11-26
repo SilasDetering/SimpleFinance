@@ -7,7 +7,8 @@ import { arcPath, donutSegments, segmentAt } from '@/domain/donut';
 /**
  * Donut-Diagramm mit Auswahl: Antippen wählt ein Segment, Ziehen mit dem Finger
  * entlang des Rings wechselt die Auswahl bei jedem neuen Segment (mit kurzem Haptik-Tick).
- * Ein Tipp ins Loch in der Mitte ruft `onPressCenter` auf.
+ * Ein Tipp ins Loch in der Mitte ruft `onPressCenter` auf, ein erneuter Tipp (ohne Wischen)
+ * auf das schon gewählte Segment `onPressSelected`.
  */
 export function DonutChart({
   values,
@@ -15,6 +16,7 @@ export function DonutChart({
   selectedIndex,
   onSelect,
   onPressCenter,
+  onPressSelected,
   onGestureActive,
   radius = 88,
   innerRadius = 64,
@@ -26,6 +28,8 @@ export function DonutChart({
   selectedIndex: number | null;
   onSelect: (index: number | null) => void;
   onPressCenter?: () => void;
+  /** Erneuter Tipp auf das bereits gewählte Segment */
+  onPressSelected?: (index: number) => void;
   /** true, solange ein Finger auf dem Diagramm liegt – z. B. um das Scrollen der Seite zu sperren */
   onGestureActive?: (active: boolean) => void;
   radius?: number;
@@ -41,11 +45,12 @@ export function DonutChart({
   const segments = useMemo(() => donutSegments(values), [values]);
 
   // Aktuelle Werte für den PanResponder, der nur einmal angelegt wird
-  const state = useRef({ segments, selectedIndex, onSelect, onPressCenter, onGestureActive, origin: { x: 0, y: 0 }, moved: false, startIndex: null as number | null });
+  const state = useRef({ segments, selectedIndex, onSelect, onPressCenter, onPressSelected, onGestureActive, origin: { x: 0, y: 0 }, moved: false, startIndex: null as number | null });
   state.current.segments = segments;
   state.current.selectedIndex = selectedIndex;
   state.current.onSelect = onSelect;
   state.current.onPressCenter = onPressCenter;
+  state.current.onPressSelected = onPressSelected;
   state.current.onGestureActive = onGestureActive;
 
   const pan = useRef(
@@ -83,9 +88,9 @@ export function DonutChart({
           s.onPressCenter?.();
           return;
         }
-        // Erneutes Antippen des schon gewählten Segments hebt die Auswahl auf
+        // Zweiter Tipp auf das schon gewählte Segment
         const i = hit(dx, dy);
-        if (i !== null && i === s.startIndex) s.onSelect(null);
+        if (i !== null && i === s.startIndex) s.onPressSelected?.(i);
       },
     }),
   ).current;

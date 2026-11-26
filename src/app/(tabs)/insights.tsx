@@ -188,7 +188,8 @@ export default function InsightsScreen() {
                   selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
                   onSelect={(i) => setSelectedCat(i === null ? null : byCategory[i]?.categoryId ?? null)}
                   onGestureActive={setChartGesture}
-                  onPressCenter={() => (selectedShare ? openCategory(selectedShare.categoryId) : undefined)}
+                  onPressCenter={() => setSelectedCat(null)}
+                  onPressSelected={(i) => byCategory[i] && openCategory(byCategory[i].categoryId)}
                 >
                   {selectedShare ? (
                     <>
@@ -205,9 +206,6 @@ export default function InsightsScreen() {
                     </>
                   )}
                 </DonutChart>
-                <Text style={[font.small, { color: t.textFaint, marginTop: space.sm }]}>
-                  {selectedShare ? 'Mitte antippen für die Einzelposten' : 'Antippen oder mit dem Finger entlangfahren'}
-                </Text>
               </View>
               {byCategory.map((c) => {
                 const cat = categoryById.get(c.categoryId);
