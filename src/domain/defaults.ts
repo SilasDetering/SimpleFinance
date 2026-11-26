@@ -127,7 +127,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     id: CATEGORY_TRANSFER,
     name: 'Umbuchungen/Sparen',
     color: '#9AA0A6',
-    icon: 'swap-horizontal-outline',
+    icon: 'mci:piggy-bank-outline',
     type: 'transfer',
     isSystem: false,
     keywords: ['Umbuchung', 'Extra-Konto', 'Extrakonto', 'Tagesgeld', 'Sparplan', 'Depot', 'Übertrag', 'Trade Republic', 'Scalable'],
@@ -169,5 +169,5 @@ export const CATEGORY_ICONS = [
   'airplane-outline', 'repeat-outline', 'bag-handle-outline', 'shirt-outline', 'ticket-outline',
   'game-controller-outline', 'medkit-outline', 'fitness-outline', 'shield-checkmark-outline',
   'trending-up-outline', 'gift-outline', 'school-outline', 'paw-outline', 'heart-outline',
-  'swap-horizontal-outline', 'wallet-outline', 'phone-portrait-outline', 'book-outline', 'ellipsis-horizontal',
+  'mci:piggy-bank-outline', 'swap-horizontal-outline', 'wallet-outline', 'phone-portrait-outline', 'book-outline', 'ellipsis-horizontal',
 ];

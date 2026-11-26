@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { formatCents } from '@/domain/money';
@@ -6,8 +7,13 @@ import type { Category } from '@/domain/types';
 import { font, radius, space, useTheme } from './theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
+type McIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
+/** Icon-Namen sind Ionicons; mit Präfix "mci:" MaterialCommunityIcons (z. B. Sparschwein). */
 export function Icon({ name, size = 18, color }: { name: string; size?: number; color: string }) {
+  if (name.startsWith('mci:')) {
+    return <MaterialCommunityIcons name={name.slice(4) as McIconName} size={size} color={color} />;
+  }
   return <Ionicons name={name as IconName} size={size} color={color} />;
 }
 

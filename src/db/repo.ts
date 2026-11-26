@@ -219,9 +219,15 @@ export async function countSameCounterparty(db: SQLiteDatabase, counterparty: st
 }
 
 /** Gelernte Regel aus einer manuellen Korrektur: Empfänger -> Kategorie. */
-export async function learnRuleFromCorrection(db: SQLiteDatabase, keyword: string, categoryId: string): Promise<number> {
-  await db.runAsync("DELETE FROM rules WHERE field = 'counterparty' AND lower(keyword) = lower(?)", keyword.trim());
-  await addRule(db, { categoryId, keyword, field: 'counterparty', priority: 10 });
+export async function learnRuleFromCorrection(
+  db: SQLiteDatabase,
+  keyword: string,
+  categoryId: string,
+  field: RuleField = 'counterparty',
+): Promise<number> {
+  // Eine gelernte Regel ersetzt eine ältere gelernte Regel mit demselben Stichwort
+  await db.runAsync('DELETE FROM rules WHERE field = ? AND priority = 10 AND lower(keyword) = lower(?)', field, keyword.trim());
+  await addRule(db, { categoryId, keyword, field, priority: 10 });
   return recategorizeAll(db);
 }
 
