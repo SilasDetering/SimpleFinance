@@ -9,6 +9,7 @@ import * as path from 'path';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { cashBalance, incomeExpense, toLookup } from '@/domain/cash';
 import { decodeText } from '@/domain/encoding';
+import { detectRecurring } from '@/domain/recurring';
 import { parseIngCsv } from '@/domain/ingCsv';
 import { ACCOUNT_GIRO } from '@/domain/types';
 import {
@@ -71,13 +72,13 @@ describe('Repository', () => {
 
   it('importiert, kategorisiert und überspringt Duplikate bei Überlappung', async () => {
     const first = await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
-    expect(first.newCount).toBe(59);
+    expect(first.newCount).toBe(61);
     expect(first.duplicateCount).toBe(0);
     expect(first.uncategorizedCount).toBe(3); // "Unbekannter Händler XY" je Monat
 
     const second = await importParsedCsv(db, ACCOUNT_GIRO, 'b.csv', sample('ing-beispiel-okt-nov-ueberlappend.csv'));
     expect(second.duplicateCount).toBeGreaterThan(0);
-    expect(second.newCount + second.duplicateCount).toBe(27);
+    expect(second.newCount + second.duplicateCount).toBe(29);
 
     const again = await importParsedCsv(db, ACCOUNT_GIRO, 'b.csv', sample('ing-beispiel-okt-nov-ueberlappend.csv'));
     expect(again.newCount).toBe(0);
@@ -137,6 +138,22 @@ describe('Repository', () => {
     await deleteCategory(db, 'health');
     const txs = await getTransactions(db);
     expect(txs.find((t) => t.counterparty === 'Apotheke am Dom')?.categoryId).toBeNull();
+  });
+
+  it('erkennt Fixkosten in den Beispieldaten', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    await importParsedCsv(db, ACCOUNT_GIRO, 'b.csv', sample('ing-beispiel-okt-nov-ueberlappend.csv'));
+    const txs = await getTransactions(db);
+    const names = detectRecurring(txs, toLookup(await getCategories(db))).map((r) => r.name);
+    expect(names).toEqual([
+      'Hausverwaltung Müller & Söhne',
+      'Stadtwerke Köln GmbH',
+      'DB Vertrieb GmbH',
+      'HUK-COBURG Versicherung',
+      'Fitnessstudio FitX',
+      'Netflix International B.V.',
+      'Spotify AB',
+    ]);
   });
 
   it('alles löschen stellt Defaults wieder her', async () => {
