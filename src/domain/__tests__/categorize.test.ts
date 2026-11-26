@@ -49,6 +49,7 @@ describe('categorize mit Default-Regeln', () => {
     [tx('Max Mustermann', 'Umbuchung Extra-Konto', 'Überweisung'), 'transfer'],
     [tx('VISA SPARKASSE', 'GAA Köln Hbf', 'Bargeldauszahlung'), 'cash'],
     [tx('Sparkasse', 'Einzahlung', 'Bareinzahlung'), 'cash'],
+    [tx('Zalando SE', 'Retoure Erstattung', 'Gutschrift'), 'shopping'],
   ])('%o -> %s', (t, expected) => {
     expect(categorize(t, defaultRules)).toBe(expected);
   });

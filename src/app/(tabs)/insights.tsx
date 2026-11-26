@@ -330,7 +330,6 @@ export default function InsightsScreen() {
             <LineChart
               data={lineData}
               areaChart
-              curved
               hideDataPoints
               thickness={2}
               color={t.accent}

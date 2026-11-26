@@ -121,7 +121,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     icon: 'trending-up-outline',
     type: 'income',
     isSystem: false,
-    keywords: ['Gehalt', 'Lohn', 'Bezüge', 'Rente', 'Kindergeld', 'Erstattung', 'Zinsen', 'Dividende', 'BAföG', 'Steuererstattung'],
+    keywords: ['Gehalt', 'Lohn', 'Bezüge', 'Rente', 'Kindergeld', 'Zinsen', 'Dividende', 'BAföG', 'Steuererstattung'],
   },
   {
     id: CATEGORY_TRANSFER,

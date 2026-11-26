@@ -75,7 +75,8 @@ export interface CategoryDeviation {
 
 /**
  * Vergleicht die Ausgaben je Kategorie im Monat mit dem eigenen Durchschnitt
- * der bis zu 12 Vormonate (nur Monate mit Daten). Liefert nur nennenswerte Abweichungen.
+ * der bis zu 12 Vormonate (nur Monate mit Daten). Liefert nur nennenswerte Abweichungen
+ * für Kategorien mit Ausgaben im gewählten Monat.
  */
 export function categoryVsAverage(
   entries: LedgerEntry[],
@@ -101,7 +102,7 @@ export function categoryVsAverage(
   for (const id of ids) {
     const averageCents = Math.round((totals.get(id) ?? 0) / previous.length);
     const currentCents = current.get(id) ?? 0;
-    if (averageCents < minAverageCents) continue;
+    if (averageCents < minAverageCents || currentCents <= 0) continue;
     const deviation = (currentCents - averageCents) / averageCents;
     if (Math.abs(deviation) >= minDeviation) result.push({ categoryId: id, currentCents, averageCents, deviation });
   }

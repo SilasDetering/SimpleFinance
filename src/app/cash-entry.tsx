@@ -97,7 +97,7 @@ export default function CashEntryScreen() {
               placeholderTextColor={t.textFaint}
               keyboardType="decimal-pad"
               autoFocus={!existing}
-              style={[font.hero, { color: t.text, minWidth: 120, textAlign: 'center', fontVariant: ['tabular-nums'] }]}
+              style={[font.hero, styles.amountInput, { color: t.text }]}
             />
             <Text style={[font.title, { color: t.textFaint }]}>€</Text>
           </View>
@@ -179,7 +179,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const styles = StyleSheet.create({
   segment: { flexDirection: 'row', borderRadius: radius.md, padding: 3 },
   segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, maxWidth: '100%' },
+  amountInput: { minWidth: 90, maxWidth: 220, flexShrink: 1, textAlign: 'center', fontVariant: ['tabular-nums'] },
   input: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 12 },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   quick: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 4 },

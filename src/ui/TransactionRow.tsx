@@ -27,7 +27,8 @@ export const TransactionRow = memo(function TransactionRow({
 }) {
   const t = useTheme();
   const isCash = tx.accountId === ACCOUNT_CASH;
-  const isCashTransfer = tx.categoryId === CATEGORY_CASH;
+  // Umbuchungen und Bargeld-Bewegungen zählen nicht als Ein-/Ausgabe -> dezent darstellen
+  const isTransfer = tx.categoryId === CATEGORY_CASH || category?.type === 'transfer';
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
       <CategoryBadge category={category} />
@@ -47,7 +48,7 @@ export const TransactionRow = memo(function TransactionRow({
       <View style={styles.right}>
         <Amount
           cents={tx.amountCents}
-          style={isCashTransfer ? { color: t.textMuted, fontWeight: '500' } : undefined}
+          style={isTransfer ? { color: t.textMuted, fontWeight: '500' } : undefined}
         />
         <Text style={[font.small, { color: t.textFaint }]}>{formatDayShort(tx.bookingDate)}</Text>
       </View>
