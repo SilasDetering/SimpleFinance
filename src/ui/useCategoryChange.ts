@@ -1,5 +1,6 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback } from 'react';
+import { isPromptExcluded } from '@/domain/categorize';
 import type { Category, Transaction } from '@/domain/types';
 import { setTransactionCategory } from '@/db/repo';
 import { useData } from './DataProvider';
@@ -11,7 +12,7 @@ import { useAskRule } from './RulePrompt';
  */
 export function useCategoryChange() {
   const db = useSQLiteContext();
-  const { reload } = useData();
+  const { reload, promptExclusions } = useData();
   const askRule = useAskRule();
 
   return useCallback(
@@ -20,9 +21,12 @@ export function useCategoryChange() {
       await setTransactionCategory(db, tx.id, category.id);
       await reload();
       if (tx.source !== 'csv' || !tx.counterparty.trim()) return;
-      // Kurz warten, bis die Kategorie-Auswahl geschlossen ist (zwei Modals gleichzeitig mag iOS nicht)
-      setTimeout(() => askRule(tx, category), 350);
+      // Für ausgenommene Empfänger (z. B. PayPal) nicht nachfragen –
+      // außer die Buchung hat einen eigenen Namen, dann lohnt sich eine Regel darauf
+      if (!tx.alias && isPromptExcluded(tx.counterparty, promptExclusions)) return;
+      // Das Sheet erscheint erst, wenn die Kategorie-Auswahl ganz zugeklappt ist (siehe RulePrompt)
+      askRule(tx, category);
     },
-    [db, reload, askRule],
+    [db, reload, askRule, promptExclusions],
   );
 }

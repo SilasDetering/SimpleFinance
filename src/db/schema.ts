@@ -89,6 +89,20 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
       "UPDATE categories SET icon = 'mci:piggy-bank-outline' WHERE id = 'transfer' AND icon = 'swap-horizontal-outline'",
     );
   },
+  // v3: Empfänger, bei denen nicht nach einer Regel gefragt wird (z. B. PayPal)
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE prompt_exclusions (
+        id TEXT PRIMARY KEY NOT NULL,
+        keyword TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+  },
+  // v4: eigener Name (Alias) pro Buchung, z. B. „AldiTalk Flat" für eine PayPal-Zahlung
+  async (db) => {
+    await db.execAsync('ALTER TABLE transactions ADD COLUMN alias TEXT;');
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {

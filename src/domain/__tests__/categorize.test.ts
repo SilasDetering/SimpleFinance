@@ -1,4 +1,4 @@
-import { categorize, findConflictingRules, findMatchingRule, matchesKeyword, suggestKeyword } from '../categorize';
+import { categorize, findConflictingRules, isPromptExcluded, findMatchingRule, matchesKeyword, suggestKeyword } from '../categorize';
 import { DEFAULT_CATEGORIES } from '../defaults';
 import type { Rule } from '../types';
 
@@ -110,5 +110,27 @@ describe('widersprüchliche Regeln', () => {
       { id: 'other', categoryId: 'shopping', keyword: 'Amazon', field: 'counterparty', priority: 10 },
     ];
     expect(findConflictingRules(tx('REWE Markt GmbH'), rules, 'leisure').map((r) => r.id)).toEqual(['learned']);
+  });
+});
+
+describe('isPromptExcluded', () => {
+  const ex = [{ keyword: 'PayPal' }];
+  it('trifft den Empfänger unabhängig von Groß-/Kleinschreibung', () => {
+    expect(isPromptExcluded('PayPal Europe S.a.r.l. et Cie S.C.A', ex)).toBe(true);
+    expect(isPromptExcluded('PAYPAL (EUROPE)', ex)).toBe(true);
+  });
+  it('lässt andere Empfänger unberührt', () => {
+    expect(isPromptExcluded('REWE Markt GmbH', ex)).toBe(false);
+    expect(isPromptExcluded('PayPal', [])).toBe(false);
+  });
+});
+
+describe('eigener Name (Alias)', () => {
+  const rule: Rule = { id: 'r', categoryId: 'phone', keyword: 'AldiTalk', field: 'counterparty', priority: 10 };
+  const paypal = { counterparty: 'PayPal Europe S.a.r.l. et Cie S.C.A', purpose: '1234 PP.5678.PP', bookingText: 'Lastschrift' };
+  it('Regeln auf den Empfänger prüfen den Alias mit', () => {
+    expect(categorize(paypal, [rule])).toBeNull();
+    expect(categorize({ ...paypal, alias: 'AldiTalk Flat' }, [rule])).toBe('phone');
+    expect(categorize({ ...paypal, alias: 'AldiTalk Flat' }, [{ ...rule, field: 'any' }])).toBe('phone');
   });
 });
