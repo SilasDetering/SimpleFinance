@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
@@ -59,6 +60,12 @@ export default function InsightsScreen() {
       },
     }),
   ).current;
+
+  const openCategory = (categoryId: string) =>
+    router.push({
+      pathname: '/category-transactions',
+      params: { id: categoryId, month: period.kind === 'month' ? period.month : 'all' },
+    });
 
   const inRange = useMemo(() => transactions.filter((tx) => inPeriod(tx, period)), [transactions, period]);
   const totals = useMemo(() => incomeExpense(inRange, lookup), [inRange, lookup]);
@@ -186,16 +193,22 @@ export default function InsightsScreen() {
               {byCategory.map((c) => {
                 const cat = categoryById.get(c.categoryId);
                 return (
-                  <View key={c.categoryId} style={styles.catRow}>
+                  <Pressable
+                    key={c.categoryId}
+                    onPress={() => openCategory(c.categoryId)}
+                    style={({ pressed }) => [styles.catRow, { opacity: pressed ? 0.6 : 1 }]}
+                    accessibilityRole="button"
+                  >
                     <View style={[styles.dot, { backgroundColor: cat?.color ?? t.textFaint }]} />
                     <Text style={[font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
                       {cat?.name ?? (c.categoryId === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt')}
                     </Text>
                     <Text style={[font.small, { color: t.textMuted, width: 48, textAlign: 'right' }]}>{formatPercent(c.share)}</Text>
-                    <Text style={[font.bodyStrong, { color: t.text, minWidth: 96, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>
+                    <Text style={[font.bodyStrong, { color: t.text, minWidth: 88, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>
                       {formatCents(c.cents)}
                     </Text>
-                  </View>
+                    <Icon name="chevron-forward" size={14} color={t.textFaint} />
+                  </Pressable>
                 );
               })}
             </>
@@ -210,7 +223,12 @@ export default function InsightsScreen() {
               const cat = categoryById.get(d.categoryId);
               const up = d.deviation > 0;
               return (
-                <View key={d.categoryId} style={styles.catRow}>
+                <Pressable
+                  key={d.categoryId}
+                  onPress={() => openCategory(d.categoryId)}
+                  style={({ pressed }) => [styles.catRow, { opacity: pressed ? 0.6 : 1 }]}
+                  accessibilityRole="button"
+                >
                   <CategoryBadge category={cat} size={28} />
                   <View style={{ flex: 1 }}>
                     <Text style={[font.body, { color: t.text }]}>{cat?.name ?? 'Sonstiges'}</Text>
@@ -222,7 +240,7 @@ export default function InsightsScreen() {
                     {up ? '+' : '−'}
                     {formatPercent(Math.abs(d.deviation))}
                   </Text>
-                </View>
+                </Pressable>
               );
             })}
           </Card>

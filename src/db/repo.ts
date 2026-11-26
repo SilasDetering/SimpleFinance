@@ -1,6 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { BACKUP_TABLES, BACKUP_VERSION, type BackupFile, type BackupRow, type BackupTable } from '@/domain/backup';
 import { categorize, sortRules } from '@/domain/categorize';
 import { splitDuplicates } from '@/domain/dedup';
+import { DEFAULT_CATEGORIES } from '@/domain/defaults';
 import type { IngCsvResult } from '@/domain/ingCsv';
 import {
   ACCOUNT_CASH,
@@ -350,17 +352,53 @@ export async function getBankBalance(db: SQLiteDatabase, accountId: string): Pro
 
 /* ---------- Backup / Löschen ---------- */
 
-export async function exportBackup(db: SQLiteDatabase) {
+export async function exportBackup(db: SQLiteDatabase): Promise<BackupFile> {
   return {
     app: 'SimpleFinance',
-    version: 1,
+    version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    accounts: await db.getAllAsync('SELECT * FROM accounts'),
-    categories: await db.getAllAsync('SELECT * FROM categories'),
-    rules: await db.getAllAsync('SELECT * FROM rules'),
-    imports: await db.getAllAsync('SELECT * FROM imports'),
-    transactions: await db.getAllAsync('SELECT * FROM transactions'),
+    accounts: await db.getAllAsync<BackupRow>('SELECT * FROM accounts'),
+    categories: await db.getAllAsync<BackupRow>('SELECT * FROM categories'),
+    rules: await db.getAllAsync<BackupRow>('SELECT * FROM rules'),
+    imports: await db.getAllAsync<BackupRow>('SELECT * FROM imports'),
+    transactions: await db.getAllAsync<BackupRow>('SELECT * FROM transactions'),
   };
+}
+
+/**
+ * Spielt ein Backup zurück und ersetzt dabei alle vorhandenen Daten.
+ * Es werden nur Spalten übernommen, die es in der aktuellen Datenbank gibt,
+ * damit auch Backups älterer App-Versionen funktionieren.
+ */
+export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Promise<void> {
+  const columns = new Map<BackupTable, Set<string>>();
+  for (const table of BACKUP_TABLES) {
+    const info = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+    columns.set(table, new Set(info.map((c) => c.name)));
+  }
+  await db.withTransactionAsync(async () => {
+    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories;');
+    // Reihenfolge wegen Fremdschlüsseln: Konten, Kategorien, Regeln, Importe, Buchungen
+    for (const table of BACKUP_TABLES) {
+      const allowed = columns.get(table)!;
+      for (const row of backup[table]) {
+        const keys = Object.keys(row).filter((k) => allowed.has(k));
+        if (keys.length === 0) continue;
+        const verb = table === 'accounts' ? 'INSERT OR REPLACE' : 'INSERT';
+        await db.runAsync(
+          `${verb} INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`,
+          keys.map((k) => row[k] as string | number | null),
+        );
+      }
+    }
+    // Systemkategorien müssen immer existieren
+    for (const c of DEFAULT_CATEGORIES.filter((x) => x.isSystem)) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO categories (id, name, color, icon, type, is_system, sort_order) VALUES (?, ?, ?, ?, ?, 1, 99)',
+        c.id, c.name, c.color, c.icon, c.type,
+      );
+    }
+  });
 }
 
 /** Löscht alle Buchungen, Importe, Regeln und eigenen Kategorien und stellt die Defaults wieder her. */

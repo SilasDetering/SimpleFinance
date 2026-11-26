@@ -18,7 +18,7 @@ export default function RootLayout() {
     <SQLiteProvider databaseName="simplefinance.db" onInit={migrate}>
       <DataProvider>
         <RulePromptProvider>
-        <ThemeProvider value={navTheme}>
+          <ThemeProvider value={navTheme}>
           <StatusBar style="auto" />
           <Stack
             screenOptions={{
@@ -33,6 +33,7 @@ export default function RootLayout() {
             <Stack.Screen name="transaction/[id]" options={{ title: 'Buchung', presentation: 'modal' }} />
             <Stack.Screen name="cash-entry" options={{ title: 'Bargeld', presentation: 'modal' }} />
             <Stack.Screen name="category/[id]" options={{ title: 'Kategorie' }} />
+            <Stack.Screen name="category-transactions" options={{ title: 'Kategorie' }} />
           </Stack>
         </ThemeProvider>
         </RulePromptProvider>

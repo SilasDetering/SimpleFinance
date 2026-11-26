@@ -3,6 +3,7 @@ import { DEFAULT_CATEGORIES } from '../defaults';
 import { detectRecurring, recurringTotal } from '../recurring';
 import {
   balanceSeries,
+  entriesForCategory,
   categoryVsAverage,
   expensesByCategory,
   monthlySeries,
@@ -124,5 +125,25 @@ describe('balanceSeries', () => {
       { date: '2026-11-01', cents: 800 },
       { date: '2026-11-02', cents: 500 },
     ]);
+  });
+});
+
+describe('entriesForCategory', () => {
+  it('liefert die Posten, die in die Kategorie-Summe einfließen', () => {
+    const entries = [
+      e('2026-11-01', -3000, 'groceries'),
+      e('2026-11-02', -800, 'groceries', 'Bäcker', ACCOUNT_CASH),
+      e('2026-10-02', -500, 'groceries'),
+      e('2026-11-03', -1750, null),
+      e('2026-11-04', -10000, 'cash'),
+    ];
+    const month = { kind: 'month' as const, month: '2026-11' };
+    const groceries = entriesForCategory(entries, lookup, 'groceries', month);
+    expect(groceries).toHaveLength(2);
+    expect(-groceries.reduce((s, x) => s + x.amountCents, 0)).toBe(
+      expensesByCategory(entries.filter((x) => x.bookingDate.startsWith('2026-11')), lookup).find((c) => c.categoryId === 'groceries')!.cents,
+    );
+    expect(entriesForCategory(entries, lookup, 'other', month)).toHaveLength(1);
+    expect(entriesForCategory(entries, lookup, 'groceries', { kind: 'all' })).toHaveLength(3);
   });
 });

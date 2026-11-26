@@ -28,3 +28,15 @@ export async function pickAndImportCsv(db: SQLiteDatabase): Promise<ImportSummar
   const parsed = parseIngCsv(text);
   return importParsedCsv(db, ACCOUNT_GIRO, asset.name ?? null, parsed);
 }
+
+/** Datei wählen und als Text lesen (für das JSON-Backup). null bei Abbruch. */
+export async function pickTextFile(types: string[]): Promise<{ name: string; text: string } | null> {
+  const result = await DocumentPicker.getDocumentAsync({ type: types, copyToCacheDirectory: true, multiple: false });
+  if (result.canceled || !result.assets?.length) return null;
+  const asset = result.assets[0];
+  const bytes =
+    Platform.OS === 'web'
+      ? new Uint8Array(await (await fetch(asset.uri)).arrayBuffer())
+      : await new File(asset.uri).bytes();
+  return { name: asset.name ?? 'backup.json', text: decodeText(bytes).text };
+}
