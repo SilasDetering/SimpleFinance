@@ -82,6 +82,7 @@ interface RuleRow {
   keyword: string;
   field: RuleField;
   priority: number;
+  created_at: string;
 }
 
 const mapRule = (r: RuleRow): Rule => ({
@@ -90,6 +91,7 @@ const mapRule = (r: RuleRow): Rule => ({
   keyword: r.keyword,
   field: r.field,
   priority: r.priority,
+  createdAt: r.created_at,
 });
 
 /* ---------- Konten ---------- */
@@ -141,7 +143,7 @@ export async function deleteCategory(db: SQLiteDatabase, id: string): Promise<vo
 /* ---------- Regeln ---------- */
 
 export async function getRules(db: SQLiteDatabase): Promise<Rule[]> {
-  const rows = await db.getAllAsync<RuleRow>('SELECT id, category_id, keyword, field, priority FROM rules');
+  const rows = await db.getAllAsync<RuleRow>('SELECT id, category_id, keyword, field, priority, created_at FROM rules');
   return rows.map(mapRule);
 }
 
@@ -226,9 +228,12 @@ export async function learnRuleFromCorrection(
   keyword: string,
   categoryId: string,
   field: RuleField = 'counterparty',
+  replaceRuleIds: string[] = [],
 ): Promise<number> {
   // Eine gelernte Regel ersetzt eine ältere gelernte Regel mit demselben Stichwort
+  // sowie die ausdrücklich übergebenen widersprüchlichen Regeln (siehe findConflictingRules)
   await db.runAsync('DELETE FROM rules WHERE field = ? AND priority = 10 AND lower(keyword) = lower(?)', field, keyword.trim());
+  for (const id of replaceRuleIds) await deleteRule(db, id);
   await addRule(db, { categoryId, keyword, field, priority: 10 });
   return recategorizeAll(db);
 }

@@ -41,6 +41,8 @@ export interface Rule {
   field: RuleField;
   /** Höhere Priorität gewinnt. Default-Regeln 0, gelernte Regeln 10, Bargeld 100. */
   priority: number;
+  /** ISO-Zeitstempel; bei sonst gleichwertigen Regeln gewinnt die neuere */
+  createdAt?: string;
 }
 
 export type TransactionSource = 'csv' | 'manual';

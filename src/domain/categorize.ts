@@ -69,10 +69,33 @@ function fieldText(tx: CategorizableTx, field: RuleField): string {
   }
 }
 
-/** Sortiert Regeln: höhere Priorität zuerst, bei Gleichstand das längere (spezifischere) Schlüsselwort. */
+/**
+ * Sortiert Regeln: höhere Priorität zuerst, bei Gleichstand das längere (spezifischere) Schlüsselwort,
+ * danach die neuere Regel. So ist die Reihenfolge immer eindeutig.
+ */
 export function sortRules(rules: Rule[]): Rule[] {
   return [...rules].sort(
-    (a, b) => b.priority - a.priority || normalize(b.keyword).length - normalize(a.keyword).length,
+    (a, b) =>
+      b.priority - a.priority ||
+      normalize(b.keyword).length - normalize(a.keyword).length ||
+      (b.createdAt ?? '').localeCompare(a.createdAt ?? '') ||
+      a.id.localeCompare(b.id),
+  );
+}
+
+/** Priorität gelernter Regeln (aus manuellen Korrekturen). */
+export const LEARNED_PRIORITY = 10;
+
+/**
+ * Gelernte Regeln, die diese Buchung treffen, aber in eine andere Kategorie zeigen.
+ * Beim Anlegen einer neuen gelernten Regel werden sie ersetzt, damit sich Regeln nicht widersprechen.
+ */
+export function findConflictingRules(tx: CategorizableTx, rules: Rule[], targetCategoryId: string): Rule[] {
+  return rules.filter(
+    (r) =>
+      r.priority === LEARNED_PRIORITY &&
+      r.categoryId !== targetCategoryId &&
+      matchesKeyword(fieldText(tx, r.field), r.keyword),
   );
 }
 
