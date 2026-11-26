@@ -10,6 +10,18 @@ export function inPeriod(entry: LedgerEntry, period: Period): boolean {
   return period.kind === 'all' || monthKey(entry.bookingDate) === period.month;
 }
 
+/** Buchungen nach Monatsschlüssel ("YYYY-MM") gruppiert, Reihenfolge innerhalb des Monats bleibt erhalten. */
+export function groupByMonth<T extends LedgerEntry>(entries: T[]): Map<string, T[]> {
+  const byMonth = new Map<string, T[]>();
+  for (const e of entries) {
+    const k = monthKey(e.bookingDate);
+    const list = byMonth.get(k);
+    if (list) list.push(e);
+    else byMonth.set(k, [e]);
+  }
+  return byMonth;
+}
+
 /** Alle Monate mit Buchungen, aufsteigend. */
 export function monthsWithData(entries: LedgerEntry[]): string[] {
   return [...new Set(entries.map((e) => monthKey(e.bookingDate)))].sort();
@@ -44,12 +56,7 @@ export interface MonthBar {
 
 /** Einnahmen und Ausgaben der letzten `count` Monate bis einschließlich `endMonth`. */
 export function monthlySeries(entries: LedgerEntry[], lookup: CategoryLookup, endMonth: string, count: number): MonthBar[] {
-  const byMonth = new Map<string, LedgerEntry[]>();
-  for (const e of entries) {
-    const k = monthKey(e.bookingDate);
-    if (!byMonth.has(k)) byMonth.set(k, []);
-    byMonth.get(k)!.push(e);
-  }
+  const byMonth = groupByMonth(entries);
   const result: MonthBar[] = [];
   for (let i = count - 1; i >= 0; i--) {
     const month = addMonths(endMonth, -i);
@@ -90,10 +97,12 @@ export function categoryVsAverage(
   const previous = allMonths.filter((m) => m < month && m >= from);
   if (previous.length === 0) return [];
 
-  const current = new Map(expensesByCategory(entries.filter((e) => monthKey(e.bookingDate) === month), lookup).map((c) => [c.categoryId, c.cents]));
+  // Einmal nach Monat gruppieren statt für jeden Monat alle Buchungen erneut zu filtern
+  const byMonth = groupByMonth(entries);
+  const current = new Map(expensesByCategory(byMonth.get(month) ?? [], lookup).map((c) => [c.categoryId, c.cents]));
   const totals = new Map<string, number>();
   for (const m of previous) {
-    for (const c of expensesByCategory(entries.filter((e) => monthKey(e.bookingDate) === m), lookup)) {
+    for (const c of expensesByCategory(byMonth.get(m) ?? [], lookup)) {
       totals.set(c.categoryId, (totals.get(c.categoryId) ?? 0) + c.cents);
     }
   }

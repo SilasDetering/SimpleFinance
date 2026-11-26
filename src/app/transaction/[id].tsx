@@ -59,8 +59,9 @@ export default function TransactionDetail() {
         style: 'destructive',
         onPress: async () => {
           await deleteTransaction(db, tx.id);
-          await reload();
+          // Erst zurück, dann neu laden: sonst blitzt kurz „Buchung nicht gefunden" auf
           router.back();
+          await reload();
         },
       },
     ]);

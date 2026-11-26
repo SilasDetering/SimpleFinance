@@ -1,14 +1,14 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { BACKUP_TABLES, BACKUP_VERSION, type BackupFile, type BackupRow, type BackupTable } from '@/domain/backup';
-import { categorize, sortRules, type PromptExclusion } from '@/domain/categorize';
+import { categorize, LEARNED_PRIORITY, sortRules, type PromptExclusion } from '@/domain/categorize';
 import { splitDuplicates } from '@/domain/dedup';
 import { DEFAULT_CATEGORIES } from '@/domain/defaults';
 import type { IngCsvResult } from '@/domain/ingCsv';
 import {
   ACCOUNT_CASH,
-  type Account,
   type Category,
   type CategoryType,
+  type ParsedTransaction,
   type Rule,
   type RuleField,
   type Transaction,
@@ -16,6 +16,23 @@ import {
 import { findAlias } from '@/domain/alias';
 import { newId } from './id';
 import { seedDefaultCategories } from './schema';
+
+/* ---------- Transaktionen ---------- */
+
+/*
+ * expo-sqlite teilt sich eine Verbindung: Startet eine zweite Transaktion, während die erste
+ * noch läuft (z. B. doppelt getippt oder Regel anlegen während eines Imports), schlägt sie mit
+ * „cannot start a transaction within a transaction" fehl. Schreib-Transaktionen laufen deshalb
+ * nacheinander. Nicht verschachteln: innerhalb von `task` kein weiteres inTransaction aufrufen.
+ */
+const txQueues = new WeakMap<SQLiteDatabase, Promise<unknown>>();
+
+function inTransaction(db: SQLiteDatabase, task: () => Promise<void>): Promise<void> {
+  const previous = txQueues.get(db) ?? Promise.resolve();
+  const run = previous.then(() => db.withTransactionAsync(task));
+  txQueues.set(db, run.catch(() => undefined));
+  return run;
+}
 
 /* ---------- Mapping ---------- */
 
@@ -97,12 +114,6 @@ const mapRule = (r: RuleRow): Rule => ({
   createdAt: r.created_at,
 });
 
-/* ---------- Konten ---------- */
-
-export async function getAccounts(db: SQLiteDatabase): Promise<Account[]> {
-  return db.getAllAsync<Account>('SELECT id, name, type, iban FROM accounts ORDER BY sort_order');
-}
-
 /* ---------- Kategorien ---------- */
 
 export async function getCategories(db: SQLiteDatabase): Promise<Category[]> {
@@ -135,7 +146,7 @@ export async function deleteCategory(db: SQLiteDatabase, id: string): Promise<vo
   const row = await db.getFirstAsync<{ is_system: number }>('SELECT is_system FROM categories WHERE id = ?', id);
   if (!row) return;
   if (row.is_system) throw new Error('Diese Kategorie kann nicht gelöscht werden.');
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM rules WHERE category_id = ?', id);
     await db.runAsync('UPDATE transactions SET category_id = NULL, category_manual = 0 WHERE category_id = ?', id);
     await db.runAsync('DELETE FROM categories WHERE id = ?', id);
@@ -162,10 +173,6 @@ export async function addRule(
   return id;
 }
 
-export async function updateRule(db: SQLiteDatabase, id: string, keyword: string, field: RuleField): Promise<void> {
-  await db.runAsync('UPDATE rules SET keyword = ?, field = ? WHERE id = ?', keyword.trim(), field, id);
-}
-
 export async function deleteRule(db: SQLiteDatabase, id: string): Promise<void> {
   await db.runAsync('DELETE FROM rules WHERE id = ?', id);
 }
@@ -175,10 +182,10 @@ export async function deleteRule(db: SQLiteDatabase, id: string): Promise<void> 
  * Gibt die Anzahl geänderter Buchungen zurück.
  */
 export async function recategorizeAll(db: SQLiteDatabase): Promise<number> {
-  const rules = sortRules(await getRules(db));
-  const rows = await db.getAllAsync<TxRow>("SELECT * FROM transactions WHERE category_manual = 0 AND source = 'csv'");
   let changed = 0;
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
+    const rules = sortRules(await getRules(db));
+    const rows = await db.getAllAsync<TxRow>("SELECT * FROM transactions WHERE category_manual = 0 AND source = 'csv'");
     for (const r of rows) {
       const next = categorize(
         { counterparty: r.counterparty, alias: r.alias, purpose: r.purpose, bookingText: r.booking_text },
@@ -201,11 +208,6 @@ export async function getTransactions(db: SQLiteDatabase): Promise<Transaction[]
     'SELECT * FROM transactions ORDER BY booking_date DESC, day_order DESC, created_at DESC',
   );
   return rows.map(mapTx);
-}
-
-export async function getTransaction(db: SQLiteDatabase, id: string): Promise<Transaction | null> {
-  const row = await db.getFirstAsync<TxRow>('SELECT * FROM transactions WHERE id = ?', id);
-  return row ? mapTx(row) : null;
 }
 
 export async function setTransactionCategory(db: SQLiteDatabase, id: string, categoryId: string | null): Promise<void> {
@@ -233,15 +235,6 @@ export async function setTransactionNote(db: SQLiteDatabase, id: string, note: s
   await db.runAsync('UPDATE transactions SET note = ? WHERE id = ?', note.trim() || null, id);
 }
 
-/** Anzahl weiterer, nicht manuell kategorisierter Buchungen desselben Empfängers. */
-export async function countSameCounterparty(db: SQLiteDatabase, counterparty: string, excludeId: string): Promise<number> {
-  const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM transactions WHERE lower(counterparty) = lower(?) AND id != ? AND category_manual = 0 AND source = 'csv'",
-    counterparty, excludeId,
-  );
-  return row?.n ?? 0;
-}
-
 /** Gelernte Regel aus einer manuellen Korrektur: Empfänger -> Kategorie. */
 export async function learnRuleFromCorrection(
   db: SQLiteDatabase,
@@ -252,9 +245,14 @@ export async function learnRuleFromCorrection(
 ): Promise<number> {
   // Eine gelernte Regel ersetzt eine ältere gelernte Regel mit demselben Stichwort
   // sowie die ausdrücklich übergebenen widersprüchlichen Regeln (siehe findConflictingRules)
-  await db.runAsync('DELETE FROM rules WHERE field = ? AND priority = 10 AND lower(keyword) = lower(?)', field, keyword.trim());
-  for (const id of replaceRuleIds) await deleteRule(db, id);
-  await addRule(db, { categoryId, keyword, field, priority: 10 });
+  await inTransaction(db, async () => {
+    await db.runAsync(
+      'DELETE FROM rules WHERE field = ? AND priority = ? AND lower(keyword) = lower(?)',
+      field, LEARNED_PRIORITY, keyword.trim(),
+    );
+    for (const id of replaceRuleIds) await deleteRule(db, id);
+    await addRule(db, { categoryId, keyword, field, priority: LEARNED_PRIORITY });
+  });
   return recategorizeAll(db);
 }
 
@@ -312,18 +310,6 @@ export async function importParsedCsv(
   fileName: string | null,
   parsed: IngCsvResult,
 ): Promise<ImportSummary> {
-  const existing = await db.getAllAsync<{ dedup_key: string }>(
-    'SELECT dedup_key FROM transactions WHERE account_id = ? AND dedup_key IS NOT NULL',
-    accountId,
-  );
-  const { fresh, duplicates } = splitDuplicates(accountId, parsed.transactions, new Set(existing.map((r) => r.dedup_key)));
-  const rules = sortRules(await getRules(db));
-  const templates = (
-    await db.getAllAsync<{ counterparty: string; purpose: string; amount_cents: number; alias: string; booking_date: string }>(
-      "SELECT counterparty, purpose, amount_cents, alias, booking_date FROM transactions WHERE account_id = ? AND alias IS NOT NULL AND alias != ''",
-      accountId,
-    )
-  ).map((r) => ({ counterparty: r.counterparty, purpose: r.purpose, amountCents: r.amount_cents, alias: r.alias, bookingDate: r.booking_date }));
   let aliased = 0;
   const importId = newId();
   const now = new Date().toISOString();
@@ -332,7 +318,26 @@ export async function importParsedCsv(
   const periodFrom = parsed.meta.periodFrom ?? dates[0] ?? null;
   const periodTo = parsed.meta.periodTo ?? dates[dates.length - 1] ?? null;
 
-  await db.withTransactionAsync(async () => {
+  let fresh: { tx: ParsedTransaction; key: string }[] = [];
+  let duplicates = 0;
+
+  // Vorhandene Buchungen innerhalb der Transaktion lesen, damit ein zweiter Import
+  // direkt danach die gerade eingefügten Buchungen als Duplikate erkennt
+  await inTransaction(db, async () => {
+    const existing = await db.getAllAsync<{ dedup_key: string }>(
+      'SELECT dedup_key FROM transactions WHERE account_id = ? AND dedup_key IS NOT NULL',
+      accountId,
+    );
+    const split = splitDuplicates(accountId, parsed.transactions, new Set(existing.map((r) => r.dedup_key)));
+    const rules = sortRules(await getRules(db));
+    const templates = (
+      await db.getAllAsync<{ counterparty: string; purpose: string; amount_cents: number; alias: string; booking_date: string }>(
+        "SELECT counterparty, purpose, amount_cents, alias, booking_date FROM transactions WHERE account_id = ? AND alias IS NOT NULL AND alias != ''",
+        accountId,
+      )
+    ).map((r) => ({ counterparty: r.counterparty, purpose: r.purpose, amountCents: r.amount_cents, alias: r.alias, bookingDate: r.booking_date }));
+    fresh = split.fresh;
+    duplicates = split.duplicates;
     await db.runAsync(
       `INSERT INTO imports (id, account_id, file_name, period_from, period_to, balance_cents, new_count, duplicate_count, imported_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -414,7 +419,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
     const info = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
     columns.set(table, new Set(info.map((c) => c.name)));
   }
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.execAsync(
       'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions;',
     );
@@ -443,7 +448,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
 
 /** Löscht alle Buchungen, Importe, Regeln und eigenen Kategorien und stellt die Defaults wieder her. */
 export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; UPDATE accounts SET iban = NULL;');
     await seedDefaultCategories(db);
   });

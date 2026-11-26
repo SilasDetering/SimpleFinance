@@ -30,6 +30,7 @@ import {
   getTransactions,
   importParsedCsv,
   learnRuleFromCorrection,
+  recategorizeAll,
   setTransactionCategory,
 } from '../repo';
 import { migrate } from '../schema';
@@ -96,6 +97,31 @@ describe('Repository', () => {
     expect(new Set(txs.map((t) => t.dedupKey)).size).toBe(txs.length);
     expect(txs.find((t) => t.bookingText === 'Bargeldauszahlung')?.categoryId).toBe('cash');
     expect(txs.find((t) => t.bookingText === 'Bareinzahlung')?.categoryId).toBe('cash');
+  });
+
+  it('gleichzeitige Schreibvorgänge laufen nacheinander statt sich zu überschneiden', async () => {
+    const parsed = sample('ing-beispiel-aug-okt.csv');
+    // Doppelt angetippter Import + direkt danach „Regeln anwenden": ohne Warteschlange
+    // würde die zweite Transaktion mit „cannot start a transaction within a transaction" scheitern
+    const [a, b, changed] = await Promise.all([
+      importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed),
+      importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed),
+      recategorizeAll(db),
+    ]);
+    expect(a.newCount).toBe(parsed.transactions.length);
+    expect(b.newCount).toBe(0);
+    expect(b.duplicateCount).toBe(parsed.transactions.length);
+    expect(changed).toBe(0);
+    expect(await getTransactions(db)).toHaveLength(parsed.transactions.length);
+  });
+
+  it('eine fehlgeschlagene Transaktion blockiert die folgenden nicht', async () => {
+    await expect(deleteCategory(db, 'cash')).rejects.toThrow();
+    const parsed = sample('ing-beispiel-aug-okt.csv');
+    const broken = { ...parsed, transactions: [{ ...parsed.transactions[0], amountCents: null as never }] };
+    await expect(importParsedCsv(db, ACCOUNT_GIRO, 'kaputt.csv', broken)).rejects.toThrow();
+    const ok = await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed);
+    expect(ok.newCount).toBe(parsed.transactions.length);
   });
 
   it('Kontostand kommt aus dem neuesten Export', async () => {
