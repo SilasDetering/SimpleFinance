@@ -9,6 +9,7 @@ import * as path from 'path';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { cashBalance, incomeExpense, toLookup } from '@/domain/cash';
 import { BackupFormatError, parseBackup } from '@/domain/backup';
+import { findConflictingRules } from '@/domain/categorize';
 import { decodeText } from '@/domain/encoding';
 import { detectRecurring } from '@/domain/recurring';
 import { parseIngCsv } from '@/domain/ingCsv';
@@ -198,5 +199,29 @@ describe('Repository', () => {
     expect(() => parseBackup('{"app":"Andere"}')).toThrow('kein SimpleFinance-Backup');
     expect(() => parseBackup('{"app":"SimpleFinance","version":99}')).toThrow('neueren App-Version');
     expect(() => parseBackup('{"app":"SimpleFinance","version":1,"accounts":[]}')).toThrow('unvollständig');
+  });
+
+  it('Umkategorisieren mit neuer Regel ersetzt die alte gelernte Regel', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const name = 'Unbekannter Händler XY';
+    let txs = await getTransactions(db);
+    const [first, second] = txs.filter((t) => t.counterparty === name);
+    await setTransactionCategory(db, first.id, 'leisure');
+    await learnRuleFromCorrection(db, name, 'leisure');
+
+    // Später anders entschieden, mit verändertem Stichwort
+    await setTransactionCategory(db, second.id, 'shopping');
+    const conflicts = findConflictingRules(second, await getRules(db), 'shopping');
+    expect(conflicts.map((r) => r.keyword)).toEqual([name]);
+    await learnRuleFromCorrection(db, 'Unbekannter Händler', 'shopping', 'counterparty', conflicts.map((r) => r.id));
+
+    const rules = (await getRules(db)).filter((r) => r.priority === 10);
+    expect(rules.map((r) => [r.keyword, r.categoryId])).toEqual([['Unbekannter Händler', 'shopping']]);
+    txs = await getTransactions(db);
+    const auto = txs.filter((t) => t.counterparty === name && !t.categoryManual);
+    expect(auto.length).toBeGreaterThan(0);
+    expect(auto.every((t) => t.categoryId === 'shopping')).toBe(true);
+    // manuell gesetzte Kategorien bleiben unangetastet
+    expect(txs.find((t) => t.id === first.id)?.categoryId).toBe('leisure');
   });
 });

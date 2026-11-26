@@ -1,4 +1,4 @@
-import { categorize, findMatchingRule, matchesKeyword, suggestKeyword } from '../categorize';
+import { categorize, findConflictingRules, findMatchingRule, matchesKeyword, suggestKeyword } from '../categorize';
 import { DEFAULT_CATEGORIES } from '../defaults';
 import type { Rule } from '../types';
 
@@ -89,5 +89,26 @@ describe('Priorität und gelernte Regeln', () => {
   it('suggestKeyword entfernt Rechtsformen', () => {
     expect(suggestKeyword('Hausverwaltung Müller GmbH')).toBe('Hausverwaltung Müller');
     expect(suggestKeyword('Zalando SE')).toBe('Zalando');
+  });
+});
+
+describe('widersprüchliche Regeln', () => {
+  it('bei gleich langen Stichwörtern gewinnt die neuere Regel', () => {
+    const rules: Rule[] = [
+      { id: 'a', categoryId: 'alt', keyword: 'REWE', field: 'counterparty', priority: 10, createdAt: '2026-11-01T10:00:00Z' },
+      { id: 'b', categoryId: 'neu', keyword: 'rewe', field: 'any', priority: 10, createdAt: '2026-11-20T10:00:00Z' },
+    ];
+    expect(categorize(tx('REWE Markt'), rules)).toBe('neu');
+    expect(categorize(tx('REWE Markt'), [...rules].reverse())).toBe('neu');
+  });
+
+  it('findet gelernte Regeln, die die Buchung in eine andere Kategorie schicken', () => {
+    const rules: Rule[] = [
+      { id: 'learned', categoryId: 'groceries', keyword: 'REWE', field: 'counterparty', priority: 10 },
+      { id: 'same', categoryId: 'leisure', keyword: 'REWE Markt', field: 'counterparty', priority: 10 },
+      { id: 'default', categoryId: 'groceries', keyword: 'REWE', field: 'any', priority: 0 },
+      { id: 'other', categoryId: 'shopping', keyword: 'Amazon', field: 'counterparty', priority: 10 },
+    ];
+    expect(findConflictingRules(tx('REWE Markt GmbH'), rules, 'leisure').map((r) => r.id)).toEqual(['learned']);
   });
 });

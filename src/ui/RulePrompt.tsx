@@ -1,7 +1,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { matchesKeyword, suggestKeyword } from '@/domain/categorize';
+import { findConflictingRules, matchesKeyword, suggestKeyword } from '@/domain/categorize';
 import type { Category, RuleField, Transaction } from '@/domain/types';
 import { learnRuleFromCorrection } from '@/db/repo';
 import { BottomSheet } from './BottomSheet';
@@ -23,7 +23,7 @@ const FIELD_LABEL: Record<'counterparty' | 'any', string> = { counterparty: 'Im 
 export function RulePromptProvider({ children }: { children: React.ReactNode }) {
   const t = useTheme();
   const db = useSQLiteContext();
-  const { transactions, reload } = useData();
+  const { transactions, rules, categoryById, reload } = useData();
   const [state, setState] = useState<{ tx: Transaction; category: Category } | null>(null);
   const [keyword, setKeyword] = useState('');
   const [field, setField] = useState<'counterparty' | 'any'>('counterparty');
@@ -48,11 +48,17 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
     }).length;
   }, [transactions, keyword, field, state]);
 
+  // Bestehende gelernte Regeln, die diese Buchung in eine andere Kategorie schicken würden
+  const conflicts = useMemo(
+    () => (state ? findConflictingRules(state.tx, rules, state.category.id) : []),
+    [state, rules],
+  );
+
   const create = async () => {
     if (!state || keyword.trim().length < 2) return;
     setSaving(true);
     try {
-      await learnRuleFromCorrection(db, keyword.trim(), state.category.id, field as RuleField);
+      await learnRuleFromCorrection(db, keyword.trim(), state.category.id, field as RuleField, conflicts.map((r) => r.id));
       await reload();
       close();
     } finally {
@@ -109,8 +115,21 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
               </Text>
             </View>
 
+            {conflicts.length > 0 ? (
+              <View style={[styles.conflict, { backgroundColor: t.surface }]}>
+                <Text style={[font.smallStrong, { color: t.text }]}>
+                  {conflicts.length === 1 ? 'Ersetzt diese Regel:' : 'Ersetzt diese Regeln:'}
+                </Text>
+                {conflicts.map((r) => (
+                  <Text key={r.id} style={[font.small, { color: t.textMuted }]}>
+                    „{r.keyword}" → {categoryById.get(r.categoryId)?.name ?? 'unbekannte Kategorie'}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
             <View style={{ gap: space.sm }}>
-              <Button title="Regel anlegen" onPress={create} disabled={!valid || saving} />
+              <Button title={conflicts.length > 0 ? 'Regel ersetzen' : 'Regel anlegen'} onPress={create} disabled={!valid || saving} />
               <Button title="Nur diese Buchung" variant="secondary" onPress={close} />
             </View>
           </View>
@@ -129,5 +148,6 @@ export function useAskRule(): AskRule {
 const styles = StyleSheet.create({
   target: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   input: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 12 },
+  conflict: { borderRadius: radius.md, padding: space.md, gap: 2 },
   fieldChip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 4 },
 });
