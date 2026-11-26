@@ -3,6 +3,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { migrate } from '@/db/schema';
 import { DataProvider } from '@/ui/DataProvider';
+import { RulePromptProvider } from '@/ui/RulePrompt';
 import { useTheme } from '@/ui/theme';
 
 export default function RootLayout() {
@@ -16,7 +17,8 @@ export default function RootLayout() {
   return (
     <SQLiteProvider databaseName="simplefinance.db" onInit={migrate}>
       <DataProvider>
-        <ThemeProvider value={navTheme}>
+        <RulePromptProvider>
+          <ThemeProvider value={navTheme}>
           <StatusBar style="auto" />
           <Stack
             screenOptions={{
@@ -31,8 +33,10 @@ export default function RootLayout() {
             <Stack.Screen name="transaction/[id]" options={{ title: 'Buchung', presentation: 'modal' }} />
             <Stack.Screen name="cash-entry" options={{ title: 'Bargeld', presentation: 'modal' }} />
             <Stack.Screen name="category/[id]" options={{ title: 'Kategorie' }} />
+            <Stack.Screen name="category-transactions" options={{ title: 'Kategorie' }} />
           </Stack>
         </ThemeProvider>
+        </RulePromptProvider>
       </DataProvider>
     </SQLiteProvider>
   );

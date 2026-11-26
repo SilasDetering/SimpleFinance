@@ -154,3 +154,18 @@ export function balanceSeries(
   }
   return [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, cents: v.cents }));
 }
+
+/**
+ * Die Einzelposten, die in der Auswertung zu einer Ausgabe-Kategorie zählen
+ * (gleiche Logik wie expensesByCategory: ohne Kategorie = Sonstiges, inkl. Bar-Ausgaben).
+ */
+export function entriesForCategory<T extends LedgerEntry>(
+  entries: T[],
+  lookup: CategoryLookup,
+  categoryId: string,
+  period: Period,
+): T[] {
+  return entries.filter(
+    (e) => inPeriod(e, period) && categoryTypeOf(e, lookup) !== 'transfer' && effectiveCategoryId(e) === categoryId,
+  );
+}

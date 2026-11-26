@@ -6,7 +6,9 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { todayIso } from '@/domain/dates';
 import { transactionsToCsv } from '@/domain/exportCsv';
-import { deleteAllData, exportBackup, recategorizeAll } from '@/db/repo';
+import { BackupFormatError, describeBackup, parseBackup } from '@/domain/backup';
+import { deleteAllData, exportBackup, recategorizeAll, restoreBackup } from '@/db/repo';
+import { pickTextFile } from '@/ui/importCsv';
 import { CategoryBadge, Divider, Icon, ListRow } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
 import { shareTextFile } from '@/ui/share';
@@ -44,6 +46,36 @@ export default function SettingsScreen() {
     run(async () => {
       const backup = await exportBackup(db);
       await shareTextFile(`simplefinance-backup-${todayIso()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    });
+
+  const restore = () =>
+    run(async () => {
+      const file = await pickTextFile(['application/json', 'text/plain', '*/*']);
+      if (!file) return;
+      let backup;
+      try {
+        backup = parseBackup(file.text);
+      } catch (e) {
+        throw new Error(e instanceof BackupFormatError ? e.message : String(e));
+      }
+      const confirmed = backup;
+      Alert.alert(
+        'Backup wiederherstellen?',
+        `${describeBackup(confirmed)}\n\nAlle aktuellen Daten in der App werden dabei ersetzt.`,
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          {
+            text: 'Wiederherstellen',
+            style: 'destructive',
+            onPress: () =>
+              run(async () => {
+                await restoreBackup(db, confirmed);
+                await reload();
+                Alert.alert('Wiederhergestellt', `${confirmed.transactions.length} Buchungen wurden geladen.`);
+              }),
+          },
+        ],
+      );
     });
 
   const reapply = () =>
@@ -110,6 +142,14 @@ export default function SettingsScreen() {
             <ListRow title="Buchungen als CSV exportieren" left={<Icon name="document-text-outline" size={20} color={t.text} />} onPress={exportCsv} chevron={false} />
             <Divider />
             <ListRow title="Backup exportieren (JSON)" left={<Icon name="cloud-download-outline" size={20} color={t.text} />} onPress={exportJson} chevron={false} />
+            <Divider />
+            <ListRow
+              title="Backup wiederherstellen"
+              subtitle="Ersetzt alle aktuellen Daten"
+              left={<Icon name="cloud-upload-outline" size={20} color={t.text} />}
+              onPress={restore}
+              chevron={false}
+            />
             <Divider />
             <ListRow title="Alle Daten löschen" left={<Icon name="trash-outline" size={20} color="#DC2626" />} onPress={wipe} chevron={false} />
           </View>

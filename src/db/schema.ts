@@ -83,6 +83,12 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
     );
     await seedDefaultCategories(db);
   },
+  // v2: Sparschwein-Symbol für "Umbuchungen/Sparen" (nur wenn das Icon noch nicht geändert wurde)
+  async (db) => {
+    await db.runAsync(
+      "UPDATE categories SET icon = 'mci:piggy-bank-outline' WHERE id = 'transfer' AND icon = 'swap-horizontal-outline'",
+    );
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {

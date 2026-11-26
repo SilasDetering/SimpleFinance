@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { cashBalance, incomeExpense, toLookup } from '@/domain/cash';
+import { BackupFormatError, parseBackup } from '@/domain/backup';
 import { decodeText } from '@/domain/encoding';
 import { detectRecurring } from '@/domain/recurring';
 import { parseIngCsv } from '@/domain/ingCsv';
@@ -15,6 +16,9 @@ import { ACCOUNT_GIRO } from '@/domain/types';
 import {
   addManualCash,
   deleteAllData,
+  exportBackup,
+  getRules,
+  restoreBackup,
   deleteCategory,
   getBankBalance,
   getCategories,
@@ -161,5 +165,38 @@ describe('Repository', () => {
     await deleteAllData(db);
     expect(await getTransactions(db)).toHaveLength(0);
     expect(await getCategories(db)).toHaveLength(13);
+  });
+
+  it('Backup exportieren und wiederherstellen ergibt denselben Stand', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    await addManualCash(db, { kind: 'expense', amountCents: 800, bookingDate: '2026-10-30', categoryId: 'groceries', description: 'Bäcker', note: 'lecker' });
+    await learnRuleFromCorrection(db, 'Unbekannter Händler', 'leisure');
+    const before = await exportBackup(db);
+    const json = JSON.stringify(before);
+
+    await deleteAllData(db);
+    expect(await getTransactions(db)).toHaveLength(0);
+
+    await restoreBackup(db, parseBackup(json));
+    const after = await exportBackup(db);
+    for (const table of ['accounts', 'categories', 'rules', 'imports', 'transactions'] as const) {
+      const sort = (rows: Record<string, unknown>[]) => [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      expect(sort(after[table])).toEqual(sort(before[table]));
+    }
+    expect((await getRules(db)).some((r) => r.keyword === 'Unbekannter Händler')).toBe(true);
+  });
+
+  it('Wiederherstellen ersetzt vorhandene Daten statt sie zu verdoppeln', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const backup = await exportBackup(db);
+    await restoreBackup(db, backup);
+    expect(await getTransactions(db)).toHaveLength(backup.transactions.length);
+  });
+
+  it('erkennt ungültige Backups', () => {
+    expect(() => parseBackup('kein json')).toThrow(BackupFormatError);
+    expect(() => parseBackup('{"app":"Andere"}')).toThrow('kein SimpleFinance-Backup');
+    expect(() => parseBackup('{"app":"SimpleFinance","version":99}')).toThrow('neueren App-Version');
+    expect(() => parseBackup('{"app":"SimpleFinance","version":1,"accounts":[]}')).toThrow('unvollständig');
   });
 });
