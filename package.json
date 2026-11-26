@@ -25,12 +25,10 @@
     "react-native-svg": "15.16.0"
   },
   "devDependencies": {
-    "@react-native/jest-preset": "^0.88.1",
     "@types/jest": "^30.0.0",
     "@types/papaparse": "^5.5.2",
     "@types/react": "~19.3.0",
     "jest": "^30.5.2",
-    "jest-expo": "~58.0.16",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -41,14 +39,5 @@
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },
-  "private": true,
-  "jest": {
-    "preset": "jest-expo",
-    "testMatch": [
-      "**/__tests__/**/*.test.ts"
-    ],
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1"
-    }
-  }
+  "private": true
 }
