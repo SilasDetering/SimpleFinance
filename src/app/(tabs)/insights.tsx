@@ -188,8 +188,8 @@ export default function InsightsScreen() {
                   selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
                   onSelect={(i) => setSelectedCat(i === null ? null : byCategory[i]?.categoryId ?? null)}
                   onGestureActive={setChartGesture}
-                  onPressCenter={() => setSelectedCat(null)}
-                  onPressSelected={(i) => byCategory[i] && openCategory(byCategory[i].categoryId)}
+                  onPressCenter={() => (selectedShare ? openCategory(selectedShare.categoryId) : undefined)}
+                  onPressSelected={() => setSelectedCat(null)}
                 >
                   {selectedShare ? (
                     <>
