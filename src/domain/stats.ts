@@ -169,3 +169,38 @@ export function entriesForCategory<T extends LedgerEntry>(
     (e) => inPeriod(e, period) && categoryTypeOf(e, lookup) !== 'transfer' && effectiveCategoryId(e) === categoryId,
   );
 }
+
+export interface CategoryMonth {
+  month: string;
+  /** Ausgaben (bzw. bei Einnahme-Kategorien Einnahmen) als positive Zahl; Erstattungen verringern sie */
+  cents: number;
+}
+
+/**
+ * Monatsverlauf einer Kategorie: so viele Monate wie Daten vorhanden, höchstens `maxMonths`,
+ * bis einschließlich des letzten Monats mit Buchungen. Monate ohne Buchung in der Kategorie zählen als 0.
+ */
+export function categoryMonthlySeries(
+  entries: LedgerEntry[],
+  lookup: CategoryLookup,
+  categoryId: string,
+  maxMonths = 12,
+): CategoryMonth[] {
+  const months = monthsWithData(entries);
+  if (months.length === 0) return [];
+  const first = months[0];
+  const last = months[months.length - 1];
+  const isIncome = lookup.get(categoryId)?.type === 'income';
+  const sums = new Map<string, number>();
+  for (const e of entriesForCategory(entries, lookup, categoryId, { kind: 'all' })) {
+    const k = monthKey(e.bookingDate);
+    sums.set(k, (sums.get(k) ?? 0) + (isIncome ? e.amountCents : -e.amountCents));
+  }
+  const result: CategoryMonth[] = [];
+  for (let i = maxMonths - 1; i >= 0; i--) {
+    const month = addMonths(last, -i);
+    if (month < first) continue;
+    result.push({ month, cents: sums.get(month) ?? 0 });
+  }
+  return result;
+}

@@ -2,6 +2,7 @@ import { toLookup, type LedgerEntry } from '../cash';
 import { DEFAULT_CATEGORIES } from '../defaults';
 import { detectRecurring, recurringTotal } from '../recurring';
 import {
+  categoryMonthlySeries,
   balanceSeries,
   entriesForCategory,
   categoryVsAverage,
@@ -145,5 +146,40 @@ describe('entriesForCategory', () => {
     );
     expect(entriesForCategory(entries, lookup, 'other', month)).toHaveLength(1);
     expect(entriesForCategory(entries, lookup, 'groceries', { kind: 'all' })).toHaveLength(3);
+  });
+});
+
+describe('categoryMonthlySeries', () => {
+  it('zeigt alle Monate mit Daten, Lücken als 0, Erstattungen verrechnet', () => {
+    const entries = [
+      e('2026-08-03', -5000, 'groceries'),
+      e('2026-08-20', 1000, 'groceries'), // Erstattung
+      e('2026-09-10', -2000, 'leisure'),
+      e('2026-10-05', -3000, 'groceries'),
+      e('2026-10-06', -100000, 'cash'), // Abhebung zählt nicht
+    ];
+    expect(categoryMonthlySeries(entries, lookup, 'groceries')).toEqual([
+      { month: '2026-08', cents: 4000 },
+      { month: '2026-09', cents: 0 },
+      { month: '2026-10', cents: 3000 },
+    ]);
+  });
+
+  it('begrenzt auf die letzten 12 Monate', () => {
+    const entries = Array.from({ length: 18 }, (_, i) => {
+      const y = 2025 + Math.floor(i / 12);
+      const m = String((i % 12) + 1).padStart(2, '0');
+      return e(`${y}-${m}-15`, -1000 * (i + 1), 'groceries');
+    });
+    const s = categoryMonthlySeries(entries, lookup, 'groceries');
+    expect(s).toHaveLength(12);
+    expect(s[0]).toEqual({ month: '2025-07', cents: 7000 });
+    expect(s[11]).toEqual({ month: '2026-06', cents: 18000 });
+  });
+
+  it('Einnahme-Kategorien zählen positiv', () => {
+    expect(categoryMonthlySeries([e('2026-10-01', 250000, 'income')], lookup, 'income')).toEqual([
+      { month: '2026-10', cents: 250000 },
+    ]);
   });
 });
