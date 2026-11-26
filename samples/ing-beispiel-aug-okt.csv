@@ -1,0 +1,76 @@
+Umsatzanzeige;Datei erstellt am: 26.11.2026 18:30
+;Letztes Update: aktuell
+
+IBAN;DE89 3704 0044 0532 0130 00
+Kontoname;Girokonto
+Bank;ING
+Kunde;Max Mustermann
+Zeitraum;01.08.2026 - 31.10.2026
+Saldo;4.597,79;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in Ihrem Internetbanking angezeigt werden.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+27.10.2026;27.10.2026;Unbekannter Händler XY;Lastschrift;Kartenzahlung 4711;4.597,79;EUR;-31,20;EUR
+26.10.2026;26.10.2026;Apotheke am Dom;Lastschrift;Kartenzahlung;4.628,99;EUR;-23,40;EUR
+25.10.2026;25.10.2026;Muster Tech GmbH;Gehalt/Rente;Gehalt 10/2026;4.652,39;EUR;2.850,00;EUR
+22.10.2026;22.10.2026;Amazon EU S.a.r.L.;Lastschrift;AMZN Mktp DE Bestellung 302-1234567;1.802,39;EUR;-39,99;EUR
+20.10.2026;20.10.2026;Café Kranz;Lastschrift;Kartenzahlung;1.842,38;EUR;-22,60;EUR
+19.10.2026;19.10.2026;Kino Cinedom;Lastschrift;Ticketkauf;1.864,98;EUR;-24,00;EUR
+18.10.2026;18.10.2026;Max Mustermann;Überweisung;Umbuchung Extra-Konto Sparen;1.888,98;EUR;-200,00;EUR
+17.10.2026;17.10.2026;Edeka Center Schäfer;Lastschrift;Einkauf;2.088,98;EUR;-44,75;EUR
+16.10.2026;16.10.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 87654321;2.133,73;EUR;-51,20;EUR
+15.10.2026;15.10.2026;ARAL Station 123;Lastschrift;Tankstelle Aachener Str.;2.184,93;EUR;-66,30;EUR
+14.10.2026;14.10.2026;HUK-COBURG Versicherung;Lastschrift;Kfz-Haftpflicht Beitrag;2.251,23;EUR;-45,12;EUR
+12.10.2026;12.10.2026;Lieferando.de;Lastschrift;Bestellung Pizza Pasta;2.296,35;EUR;-19,90;EUR
+10.10.2026;10.10.2026;DB Vertrieb GmbH;Lastschrift;Deutschlandticket Abo;2.316,25;EUR;-58,00;EUR
+09.10.2026;09.10.2026;Fitnessstudio FitX;Lastschrift;Mitgliedsbeitrag;2.374,25;EUR;-24,99;EUR
+08.10.2026;08.10.2026;VISA SPARKASSE KOELNBONN;Bargeldauszahlung;GAA Köln Hbf Karte 1234;2.399,24;EUR;-100,00;EUR
+06.10.2026;06.10.2026;VISA LIDL DIENSTLEISTUNG;Lastschrift;Lidl sagt Danke;2.499,24;EUR;-18,76;EUR
+05.10.2026;05.10.2026;Stadtwerke Köln GmbH;Lastschrift;Abschlag Strom/Gas Kundennr. 4711;2.518,00;EUR;-98,00;EUR
+04.10.2026;04.10.2026;Netflix International B.V.;Lastschrift;Netflix Monatsabo;2.616,00;EUR;-13,99;EUR
+03.10.2026;03.10.2026;dm-drogerie markt;Lastschrift;dm sagt Danke;2.629,99;EUR;-18,67;EUR
+03.10.2026;03.10.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 12345678;2.648,66;EUR;-29,50;EUR
+02.10.2026;02.10.2026;Spotify AB;Lastschrift;Spotify Premium P1234567;2.678,16;EUR;-11,99;EUR
+01.10.2026;01.10.2026;Hausverwaltung Müller & Söhne;Dauerauftrag/Terminüberweisung;Miete Wohnung Kölner Straße 12;2.690,15;EUR;-850,00;EUR
+28.09.2026;28.09.2026;Sparkasse KölnBonn;Bareinzahlung;Bareinzahlung Einzahlautomat;3.540,15;EUR;50,00;EUR
+27.09.2026;27.09.2026;Unbekannter Händler XY;Lastschrift;Kartenzahlung 4711;3.490,15;EUR;-9,90;EUR
+25.09.2026;25.09.2026;Muster Tech GmbH;Gehalt/Rente;Gehalt 09/2026;3.500,05;EUR;2.850,00;EUR
+22.09.2026;22.09.2026;Amazon EU S.a.r.L.;Lastschrift;AMZN Mktp DE Bestellung 302-1234567;650,05;EUR;-89,50;EUR
+20.09.2026;20.09.2026;Café Kranz;Lastschrift;Kartenzahlung;739,55;EUR;-8,70;EUR
+18.09.2026;18.09.2026;Max Mustermann;Überweisung;Umbuchung Extra-Konto Sparen;748,25;EUR;-200,00;EUR
+17.09.2026;17.09.2026;Edeka Center Schäfer;Lastschrift;Einkauf;948,25;EUR;-15,90;EUR
+16.09.2026;16.09.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 87654321;964,15;EUR;-33,40;EUR
+15.09.2026;15.09.2026;ARAL Station 123;Lastschrift;Tankstelle Aachener Str.;997,55;EUR;-48,70;EUR
+14.09.2026;14.09.2026;HUK-COBURG Versicherung;Lastschrift;Kfz-Haftpflicht Beitrag;1.046,25;EUR;-45,12;EUR
+12.09.2026;12.09.2026;Lieferando.de;Lastschrift;Bestellung Pizza Pasta;1.091,37;EUR;-38,90;EUR
+10.09.2026;10.09.2026;DB Vertrieb GmbH;Lastschrift;Deutschlandticket Abo;1.130,27;EUR;-58,00;EUR
+09.09.2026;09.09.2026;Fitnessstudio FitX;Lastschrift;Mitgliedsbeitrag;1.188,27;EUR;-24,99;EUR
+08.09.2026;08.09.2026;VISA SPARKASSE KOELNBONN;Bargeldauszahlung;GAA Köln Hbf Karte 1234;1.213,26;EUR;-100,00;EUR
+06.09.2026;06.09.2026;VISA LIDL DIENSTLEISTUNG;Lastschrift;Lidl sagt Danke;1.313,26;EUR;-41,20;EUR
+05.09.2026;05.09.2026;Stadtwerke Köln GmbH;Lastschrift;Abschlag Strom/Gas Kundennr. 4711;1.354,46;EUR;-98,00;EUR
+04.09.2026;04.09.2026;Netflix International B.V.;Lastschrift;Netflix Monatsabo;1.452,46;EUR;-13,99;EUR
+03.09.2026;03.09.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 12345678;1.466,45;EUR;-68,15;EUR
+02.09.2026;02.09.2026;Spotify AB;Lastschrift;Spotify Premium P1234567;1.534,60;EUR;-11,99;EUR
+01.09.2026;01.09.2026;Hausverwaltung Müller & Söhne;Dauerauftrag/Terminüberweisung;Miete Wohnung Kölner Straße 12;1.546,59;EUR;-850,00;EUR
+27.08.2026;27.08.2026;Unbekannter Händler XY;Lastschrift;Kartenzahlung 4711;2.396,59;EUR;-17,50;EUR
+26.08.2026;26.08.2026;Apotheke am Dom;Lastschrift;Kartenzahlung;2.414,09;EUR;-12,95;EUR
+25.08.2026;25.08.2026;Muster Tech GmbH;Gehalt/Rente;Gehalt 08/2026;2.427,04;EUR;2.850,00;EUR
+22.08.2026;22.08.2026;Amazon EU S.a.r.L.;Lastschrift;AMZN Mktp DE Bestellung 302-1234567;-422,96;EUR;-29,99;EUR
+20.08.2026;20.08.2026;Café Kranz;Lastschrift;Kartenzahlung;-392,97;EUR;-14,80;EUR
+18.08.2026;18.08.2026;Max Mustermann;Überweisung;Umbuchung Extra-Konto Sparen;-378,17;EUR;-200,00;EUR
+17.08.2026;17.08.2026;Edeka Center Schäfer;Lastschrift;Einkauf;-178,17;EUR;-31,20;EUR
+16.08.2026;16.08.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 87654321;-146,97;EUR;-18,99;EUR
+15.08.2026;15.08.2026;ARAL Station 123;Lastschrift;Tankstelle Aachener Str.;-127,98;EUR;-60,12;EUR
+14.08.2026;14.08.2026;HUK-COBURG Versicherung;Lastschrift;Kfz-Haftpflicht Beitrag;-67,86;EUR;-45,12;EUR
+12.08.2026;12.08.2026;Lieferando.de;Lastschrift;Bestellung Pizza Pasta;-22,74;EUR;-24,50;EUR
+10.08.2026;10.08.2026;DB Vertrieb GmbH;Lastschrift;Deutschlandticket Abo;1,76;EUR;-58,00;EUR
+08.08.2026;08.08.2026;VISA SPARKASSE KOELNBONN;Bargeldauszahlung;GAA Köln Hbf Karte 1234;59,76;EUR;-100,00;EUR
+06.08.2026;06.08.2026;VISA LIDL DIENSTLEISTUNG;Lastschrift;Lidl sagt Danke;159,76;EUR;-23,89;EUR
+05.08.2026;05.08.2026;Stadtwerke Köln GmbH;Lastschrift;Abschlag Strom/Gas Kundennr. 4711;183,65;EUR;-98,00;EUR
+04.08.2026;04.08.2026;Netflix International B.V.;Lastschrift;Netflix Monatsabo;281,65;EUR;-13,99;EUR
+03.08.2026;03.08.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 12345678;295,64;EUR;-42,37;EUR
+02.08.2026;02.08.2026;Spotify AB;Lastschrift;Spotify Premium P1234567;338,01;EUR;-11,99;EUR
+01.08.2026;01.08.2026;Hausverwaltung Müller & Söhne;Dauerauftrag/Terminüberweisung;Miete Wohnung Kölner Straße 12;350,00;EUR;-850,00;EUR

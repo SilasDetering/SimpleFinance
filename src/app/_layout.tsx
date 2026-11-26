@@ -1,0 +1,39 @@
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { SQLiteProvider } from 'expo-sqlite';
+import { StatusBar } from 'expo-status-bar';
+import { migrate } from '@/db/schema';
+import { DataProvider } from '@/ui/DataProvider';
+import { useTheme } from '@/ui/theme';
+
+export default function RootLayout() {
+  const t = useTheme();
+  const base = t.dark ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...base,
+    colors: { ...base.colors, background: t.bg, card: t.bg, text: t.text, border: t.border, primary: t.accent },
+  };
+
+  return (
+    <SQLiteProvider databaseName="simplefinance.db" onInit={migrate}>
+      <DataProvider>
+        <ThemeProvider value={navTheme}>
+          <StatusBar style="auto" />
+          <Stack
+            screenOptions={{
+              headerShadowVisible: false,
+              headerStyle: { backgroundColor: t.bg },
+              headerTintColor: t.text,
+              contentStyle: { backgroundColor: t.bg },
+              headerBackTitle: 'Zurück',
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="transaction/[id]" options={{ title: 'Buchung', presentation: 'modal' }} />
+            <Stack.Screen name="cash-entry" options={{ title: 'Bargeld', presentation: 'modal' }} />
+            <Stack.Screen name="category/[id]" options={{ title: 'Kategorie' }} />
+          </Stack>
+        </ThemeProvider>
+      </DataProvider>
+    </SQLiteProvider>
+  );
+}
