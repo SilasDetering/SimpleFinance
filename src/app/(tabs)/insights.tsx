@@ -94,8 +94,7 @@ export default function InsightsScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
         <View style={{ padding: space.lg }}>
-          <Text style={[font.title, { color: t.text, marginTop: space.sm }]}>Auswertungen</Text>
-          <Text style={[font.body, { color: t.textMuted, marginTop: space.xl }]}>
+          <Text style={[font.body, { color: t.textMuted, marginTop: space.sm }]}>
             Sobald du eine CSV importiert hast, findest du hier deine Übersicht.
           </Text>
         </View>
