@@ -129,8 +129,6 @@ export default function InsightsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.lg }} {...pan.panHandlers}>
-        <Text style={[font.title, { color: t.text, marginTop: space.sm }]}>Auswertungen</Text>
-
         {/* Zeitraum-Auswahl */}
         <View style={styles.periodRow}>
           <Pressable onPress={() => step(-1)} disabled={!canPrev} hitSlop={10} style={{ opacity: canPrev ? 1 : 0.25 }} accessibilityLabel="Vorheriger Monat">
