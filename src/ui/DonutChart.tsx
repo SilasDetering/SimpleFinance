@@ -15,6 +15,7 @@ export function DonutChart({
   selectedIndex,
   onSelect,
   onPressCenter,
+  onGestureActive,
   radius = 88,
   innerRadius = 64,
   gapColor,
@@ -25,6 +26,8 @@ export function DonutChart({
   selectedIndex: number | null;
   onSelect: (index: number | null) => void;
   onPressCenter?: () => void;
+  /** true, solange ein Finger auf dem Diagramm liegt – z. B. um das Scrollen der Seite zu sperren */
+  onGestureActive?: (active: boolean) => void;
   radius?: number;
   innerRadius?: number;
   /** Farbe der Trennlinien zwischen Segmenten (= Hintergrund) */
@@ -38,11 +41,12 @@ export function DonutChart({
   const segments = useMemo(() => donutSegments(values), [values]);
 
   // Aktuelle Werte für den PanResponder, der nur einmal angelegt wird
-  const state = useRef({ segments, selectedIndex, onSelect, onPressCenter, origin: { x: 0, y: 0 }, moved: false, startIndex: null as number | null });
+  const state = useRef({ segments, selectedIndex, onSelect, onPressCenter, onGestureActive, origin: { x: 0, y: 0 }, moved: false, startIndex: null as number | null });
   state.current.segments = segments;
   state.current.selectedIndex = selectedIndex;
   state.current.onSelect = onSelect;
   state.current.onPressCenter = onPressCenter;
+  state.current.onGestureActive = onGestureActive;
 
   const pan = useRef(
     PanResponder.create({
@@ -50,12 +54,15 @@ export function DonutChart({
       onMoveShouldSetPanResponder: () => true,
       // Beim Ziehen am Ring soll die ScrollView nicht übernehmen
       onPanResponderTerminationRequest: () => false,
+      // Native Gesten (Scrollen) blockieren, solange der Finger auf dem Diagramm liegt
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: (e) => {
         const { locationX, locationY, pageX, pageY } = e.nativeEvent;
         const s = state.current;
         s.origin = { x: pageX - locationX, y: pageY - locationY };
         s.moved = false;
         s.startIndex = s.selectedIndex;
+        s.onGestureActive?.(true);
         const i = hit(locationX - c, locationY - c);
         if (i !== null && i !== s.selectedIndex) select(i);
       },
@@ -65,8 +72,10 @@ export function DonutChart({
         const i = hit(e.nativeEvent.pageX - s.origin.x - c, e.nativeEvent.pageY - s.origin.y - c);
         if (i !== null && i !== s.selectedIndex) select(i);
       },
+      onPanResponderTerminate: () => state.current.onGestureActive?.(false),
       onPanResponderRelease: (e) => {
         const s = state.current;
+        s.onGestureActive?.(false);
         if (s.moved) return;
         const dx = e.nativeEvent.pageX - s.origin.x - c;
         const dy = e.nativeEvent.pageY - s.origin.y - c;
