@@ -16,6 +16,10 @@ import { parseIngCsv } from '@/domain/ingCsv';
 import { ACCOUNT_GIRO } from '@/domain/types';
 import {
   addManualCash,
+  addPromptExclusion,
+  setTransactionAlias,
+  deletePromptExclusion,
+  getPromptExclusions,
   deleteAllData,
   exportBackup,
   getRules,
@@ -223,5 +227,55 @@ describe('Repository', () => {
     expect(auto.every((t) => t.categoryId === 'shopping')).toBe(true);
     // manuell gesetzte Kategorien bleiben unangetastet
     expect(txs.find((t) => t.id === first.id)?.categoryId).toBe('leisure');
+  });
+
+  it('verwaltet Empfänger ohne Regel-Nachfrage (ohne Duplikate, inkl. Backup)', async () => {
+    await addPromptExclusion(db, '  PayPal ');
+    await addPromptExclusion(db, 'paypal');
+    await addPromptExclusion(db, 'Amazon');
+    let ex = await getPromptExclusions(db);
+    expect(ex.map((e) => e.keyword)).toEqual(['Amazon', 'PayPal']);
+
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    expect(await getPromptExclusions(db)).toHaveLength(0);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    ex = await getPromptExclusions(db);
+    expect(ex.map((e) => e.keyword)).toEqual(['Amazon', 'PayPal']);
+
+    await deletePromptExclusion(db, ex[0].id);
+    expect((await getPromptExclusions(db)).map((e) => e.keyword)).toEqual(['PayPal']);
+  });
+
+  it('ältere Backups ohne Ausnahmeliste lassen sich weiterhin laden', async () => {
+    const backup = await exportBackup(db) as unknown as Record<string, unknown>;
+    delete backup.prompt_exclusions;
+    const parsed = parseBackup(JSON.stringify(backup));
+    expect(parsed.prompt_exclusions).toEqual([]);
+    await restoreBackup(db, parsed);
+    expect(await getPromptExclusions(db)).toHaveLength(0);
+  });
+
+  it('eigener Name (Alias) wird angezeigt, von Regeln geprüft und gesichert', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const tx = (await getTransactions(db)).find((t) => t.amountCents < 0 && t.source === 'csv')!;
+    expect(tx.alias).toBeNull();
+    await learnRuleFromCorrection(db, 'AldiTalk Flat', 'leisure');
+    // Regel lernen setzt nur die Regel – die Buchung trifft sie erst mit dem Alias
+    await setTransactionAlias(db, tx.id, '  AldiTalk Flat ');
+    let after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBe('AldiTalk Flat');
+    expect(after.counterparty).toBe(tx.counterparty);
+    expect(after.categoryId).toBe('leisure');
+
+    const backup = await exportBackup(db);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBe('AldiTalk Flat');
+
+    await setTransactionAlias(db, tx.id, '');
+    after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBeNull();
+    expect(after.categoryId).toBe(tx.categoryId);
   });
 });

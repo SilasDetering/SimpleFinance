@@ -117,14 +117,14 @@ export interface TopCounterparty {
 
 /** Top-Empfänger nach Ausgaben (ohne Umbuchungen). */
 export function topCounterparties(
-  entries: (LedgerEntry & { counterparty: string })[],
+  entries: (LedgerEntry & { counterparty: string; alias?: string | null })[],
   lookup: CategoryLookup,
   limit = 5,
 ): TopCounterparty[] {
   const groups = new Map<string, TopCounterparty>();
   for (const e of entries) {
     if (categoryTypeOf(e, lookup) !== 'expense') continue;
-    const name = e.counterparty.trim() || 'Ohne Empfänger';
+    const name = (e.alias || e.counterparty).trim() || 'Ohne Empfänger';
     const key = normalize(name);
     const g = groups.get(key) ?? { name, cents: 0, count: 0 };
     g.cents -= e.amountCents;

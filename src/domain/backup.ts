@@ -3,7 +3,9 @@
  * (Spaltennamen wie in SQLite), damit ein Backup ohne Umrechnung zurückgespielt werden kann.
  */
 
-export const BACKUP_TABLES = ['accounts', 'categories', 'rules', 'imports', 'transactions'] as const;
+export const BACKUP_TABLES = ['accounts', 'categories', 'rules', 'imports', 'transactions', 'prompt_exclusions'] as const;
+/** Tabellen, die in älteren Backups noch fehlen dürfen (werden dann als leer behandelt). */
+const OPTIONAL_TABLES: readonly string[] = ['prompt_exclusions'];
 export type BackupTable = (typeof BACKUP_TABLES)[number];
 export type BackupRow = Record<string, unknown>;
 
@@ -16,6 +18,7 @@ export interface BackupFile {
   rules: BackupRow[];
   imports: BackupRow[];
   transactions: BackupRow[];
+  prompt_exclusions: BackupRow[];
 }
 
 export const BACKUP_VERSION = 1;
@@ -37,6 +40,7 @@ export function parseBackup(text: string): BackupFile {
     throw new BackupFormatError('Dieses Backup stammt aus einer neueren App-Version und kann nicht gelesen werden.');
   }
   for (const table of BACKUP_TABLES) {
+    if (b[table] === undefined && OPTIONAL_TABLES.includes(table)) b[table] = [];
     const rows = b[table];
     if (!Array.isArray(rows) || rows.some((r) => !r || typeof r !== 'object' || typeof (r as BackupRow).id !== 'string')) {
       throw new BackupFormatError(`Das Backup ist unvollständig (${table}).`);

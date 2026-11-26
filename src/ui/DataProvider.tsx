@@ -2,7 +2,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { cashBalance, toLookup, type CategoryLookup } from '@/domain/cash';
 import { ACCOUNT_GIRO, type Category, type Rule, type Transaction } from '@/domain/types';
-import { getBankBalance, getCategories, getRules, getTransactions } from '@/db/repo';
+import type { PromptExclusion } from '@/domain/categorize';
+import { getBankBalance, getCategories, getPromptExclusions, getRules, getTransactions } from '@/db/repo';
 
 /**
  * Hält alle Daten im Speicher. Für ein privates Haushaltsbuch (einige tausend Buchungen)
@@ -15,6 +16,8 @@ interface DataState {
   categoryById: Map<string, Category>;
   lookup: CategoryLookup;
   rules: Rule[];
+  /** Empfänger, bei denen nicht nach einer Regel gefragt wird */
+  promptExclusions: PromptExclusion[];
   bankBalance: { cents: number; asOf: string } | null;
   cashBalanceCents: number;
   reload: () => Promise<void>;
@@ -28,15 +31,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [promptExclusions, setPromptExclusions] = useState<PromptExclusion[]>([]);
   const [bankBalance, setBankBalance] = useState<DataState['bankBalance']>(null);
 
   const reload = useCallback(async () => {
-    const [tx, cats, rs, bal] = await Promise.all([
+    const [tx, cats, rs, bal, excl] = await Promise.all([
       getTransactions(db),
       getCategories(db),
       getRules(db),
       getBankBalance(db, ACCOUNT_GIRO),
+      getPromptExclusions(db),
     ]);
+    setPromptExclusions(excl);
     setTransactions(tx);
     setCategories(cats);
     setRules(rs);
@@ -57,11 +63,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       categoryById,
       lookup: toLookup(categories),
       rules,
+      promptExclusions,
       bankBalance,
       cashBalanceCents: cashBalance(transactions),
       reload,
     };
-  }, [loading, transactions, categories, rules, bankBalance, reload]);
+  }, [loading, transactions, categories, rules, promptExclusions, bankBalance, reload]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

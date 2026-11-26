@@ -5,9 +5,9 @@ import { ACCOUNT_CASH, CATEGORY_CASH, type Category, type Transaction } from '@/
 import { Amount, CategoryBadge, CategoryChip } from './components';
 import { font, radius, space, useTheme } from './theme';
 
-/** Anzeigename einer Buchung: Empfänger, sonst Verwendungszweck/Buchungstext. */
+/** Anzeigename einer Buchung: eigener Name (Alias), sonst Empfänger, sonst Verwendungszweck/Buchungstext. */
 export function displayTitle(tx: Transaction): string {
-  return tx.counterparty || tx.purpose || tx.bookingText || 'Buchung';
+  return tx.alias || tx.counterparty || tx.purpose || tx.bookingText || 'Buchung';
 }
 
 /**

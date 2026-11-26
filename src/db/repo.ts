@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { BACKUP_TABLES, BACKUP_VERSION, type BackupFile, type BackupRow, type BackupTable } from '@/domain/backup';
-import { categorize, sortRules } from '@/domain/categorize';
+import { categorize, sortRules, type PromptExclusion } from '@/domain/categorize';
 import { splitDuplicates } from '@/domain/dedup';
 import { DEFAULT_CATEGORIES } from '@/domain/defaults';
 import type { IngCsvResult } from '@/domain/ingCsv';
@@ -24,6 +24,7 @@ interface TxRow {
   booking_date: string;
   value_date: string | null;
   counterparty: string;
+  alias: string | null;
   booking_text: string;
   purpose: string;
   amount_cents: number;
@@ -43,6 +44,7 @@ const mapTx = (r: TxRow): Transaction => ({
   bookingDate: r.booking_date,
   valueDate: r.value_date,
   counterparty: r.counterparty,
+  alias: r.alias ?? null,
   bookingText: r.booking_text,
   purpose: r.purpose,
   amountCents: r.amount_cents,
@@ -178,7 +180,7 @@ export async function recategorizeAll(db: SQLiteDatabase): Promise<number> {
   await db.withTransactionAsync(async () => {
     for (const r of rows) {
       const next = categorize(
-        { counterparty: r.counterparty, purpose: r.purpose, bookingText: r.booking_text },
+        { counterparty: r.counterparty, alias: r.alias, purpose: r.purpose, bookingText: r.booking_text },
         rules,
         { presorted: true },
       );
@@ -207,6 +209,23 @@ export async function getTransaction(db: SQLiteDatabase, id: string): Promise<Tr
 
 export async function setTransactionCategory(db: SQLiteDatabase, id: string, categoryId: string | null): Promise<void> {
   await db.runAsync('UPDATE transactions SET category_id = ?, category_manual = 1 WHERE id = ?', categoryId, id);
+}
+
+/**
+ * Setzt den eigenen Namen (Alias) einer Buchung. Leerer Text entfernt ihn.
+ * Ist die Kategorie nicht manuell gesetzt, werden die Regeln danach neu angewendet,
+ * damit eine Regel auf den Alias (z. B. „AldiTalk Flat") sofort greift.
+ */
+export async function setTransactionAlias(db: SQLiteDatabase, id: string, alias: string): Promise<void> {
+  const value = alias.trim() || null;
+  await db.runAsync('UPDATE transactions SET alias = ? WHERE id = ?', value, id);
+  const row = await db.getFirstAsync<TxRow>("SELECT * FROM transactions WHERE id = ? AND category_manual = 0 AND source = 'csv'", id);
+  if (!row) return;
+  const next = categorize(
+    { counterparty: row.counterparty, alias: row.alias, purpose: row.purpose, bookingText: row.booking_text },
+    await getRules(db),
+  );
+  if (next !== row.category_id) await db.runAsync('UPDATE transactions SET category_id = ? WHERE id = ?', next, id);
 }
 
 export async function setTransactionNote(db: SQLiteDatabase, id: string, note: string): Promise<void> {
@@ -367,6 +386,7 @@ export async function exportBackup(db: SQLiteDatabase): Promise<BackupFile> {
     rules: await db.getAllAsync<BackupRow>('SELECT * FROM rules'),
     imports: await db.getAllAsync<BackupRow>('SELECT * FROM imports'),
     transactions: await db.getAllAsync<BackupRow>('SELECT * FROM transactions'),
+    prompt_exclusions: await db.getAllAsync<BackupRow>('SELECT * FROM prompt_exclusions'),
   };
 }
 
@@ -382,7 +402,9 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
     columns.set(table, new Set(info.map((c) => c.name)));
   }
   await db.withTransactionAsync(async () => {
-    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories;');
+    await db.execAsync(
+      'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions;',
+    );
     // Reihenfolge wegen Fremdschlüsseln: Konten, Kategorien, Regeln, Importe, Buchungen
     for (const table of BACKUP_TABLES) {
       const allowed = columns.get(table)!;
@@ -409,7 +431,26 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
 /** Löscht alle Buchungen, Importe, Regeln und eigenen Kategorien und stellt die Defaults wieder her. */
 export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
   await db.withTransactionAsync(async () => {
-    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; UPDATE accounts SET iban = NULL;');
+    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; UPDATE accounts SET iban = NULL;');
     await seedDefaultCategories(db);
   });
+}
+
+/* ---------- Ausnahmen für die Regel-Nachfrage ---------- */
+
+/** Empfänger (Stichwörter), bei denen nach manueller Umkategorisierung nicht nach einer Regel gefragt wird. */
+export async function getPromptExclusions(db: SQLiteDatabase): Promise<PromptExclusion[]> {
+  return db.getAllAsync<PromptExclusion>('SELECT id, keyword FROM prompt_exclusions ORDER BY lower(keyword)');
+}
+
+export async function addPromptExclusion(db: SQLiteDatabase, keyword: string): Promise<void> {
+  const k = keyword.trim();
+  if (!k) return;
+  const exists = await db.getFirstAsync('SELECT id FROM prompt_exclusions WHERE lower(keyword) = lower(?)', k);
+  if (exists) return;
+  await db.runAsync('INSERT INTO prompt_exclusions (id, keyword, created_at) VALUES (?, ?, ?)', newId(), k, new Date().toISOString());
+}
+
+export async function deletePromptExclusion(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync('DELETE FROM prompt_exclusions WHERE id = ?', id);
 }

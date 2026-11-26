@@ -39,7 +39,7 @@ function groupKey(counterparty: string): string {
 }
 
 export function detectRecurring(
-  entries: (LedgerEntry & { counterparty: string })[],
+  entries: (LedgerEntry & { counterparty: string; alias?: string | null })[],
   lookup: CategoryLookup,
   opts: RecurringOptions = {},
 ): RecurringPayment[] {
@@ -47,11 +47,11 @@ export function detectRecurring(
   if (entries.length === 0) return [];
   const lastDataDate = entries.reduce((m, e) => (e.bookingDate > m ? e.bookingDate : m), entries[0].bookingDate);
 
-  const groups = new Map<string, (LedgerEntry & { counterparty: string })[]>();
+  const groups = new Map<string, (LedgerEntry & { counterparty: string; alias?: string | null })[]>();
   for (const e of entries) {
     if (e.amountCents >= 0) continue;
     if (categoryTypeOf(e, lookup) !== 'expense') continue;
-    const key = groupKey(e.counterparty);
+    const key = groupKey(e.alias || e.counterparty);
     if (!key) continue;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(e);
@@ -70,7 +70,7 @@ export function detectRecurring(
     const last = sorted[sorted.length - 1];
     if (daysBetween(last.bookingDate, lastDataDate) > maxInactiveDays) continue;
     result.push({
-      name: last.counterparty.trim(),
+      name: (last.alias || last.counterparty).trim(),
       monthlyCents: med,
       categoryId: last.categoryId,
       lastDate: last.bookingDate,

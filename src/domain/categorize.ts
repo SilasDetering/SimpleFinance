@@ -10,6 +10,8 @@ import type { Rule, RuleField } from './types';
 
 export interface CategorizableTx {
   counterparty: string;
+  /** Eigener Name der Buchung; wird wie ein Teil des Empfängers geprüft */
+  alias?: string | null;
   purpose: string;
   bookingText: string;
   amountCents?: number;
@@ -56,16 +58,16 @@ export function matchesKeyword(text: string, keyword: string): boolean {
   return t.includes(k);
 }
 
-function fieldText(tx: CategorizableTx, field: RuleField): string {
+export function fieldText(tx: CategorizableTx, field: RuleField): string {
   switch (field) {
     case 'counterparty':
-      return tx.counterparty;
+      return tx.alias ? `${tx.alias} ${tx.counterparty}` : tx.counterparty;
     case 'purpose':
       return tx.purpose;
     case 'bookingText':
       return tx.bookingText;
     case 'any':
-      return `${tx.counterparty} ${tx.purpose} ${tx.bookingText}`;
+      return `${tx.alias ?? ''} ${tx.counterparty} ${tx.purpose} ${tx.bookingText}`;
   }
 }
 
@@ -130,4 +132,15 @@ export function suggestKeyword(counterparty: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || counterparty.trim();
+}
+
+/** Empfänger-Stichwort, für das nach manueller Umkategorisierung nicht nach einer Regel gefragt wird. */
+export interface PromptExclusion {
+  id: string;
+  keyword: string;
+}
+
+/** Soll für diese Buchung die Frage "Regel anlegen?" entfallen? Prüft den Empfänger (case-insensitive). */
+export function isPromptExcluded(counterparty: string, exclusions: Pick<PromptExclusion, 'keyword'>[]): boolean {
+  return exclusions.some((e) => matchesKeyword(counterparty, e.keyword));
 }

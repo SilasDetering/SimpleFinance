@@ -54,6 +54,8 @@ export interface Transaction {
   bookingDate: string;
   valueDate: string | null;
   counterparty: string;
+  /** Eigener Name für die Buchung (z. B. „AldiTalk Flat" statt „PayPal"). Wird angezeigt und von Regeln mit geprüft. */
+  alias: string | null;
   bookingText: string;
   purpose: string;
   /** Betrag in Cent, negativ = Abfluss */
