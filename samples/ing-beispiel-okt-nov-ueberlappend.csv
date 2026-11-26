@@ -1,0 +1,42 @@
+Umsatzanzeige;Datei erstellt am: 26.11.2026 18:30
+;Letztes Update: aktuell
+
+IBAN;DE89 3704 0044 0532 0130 00
+Kontoname;Girokonto
+Bank;ING
+Kunde;Max Mustermann
+Zeitraum;15.10.2026 - 25.11.2026
+Saldo;6.082,30;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in Ihrem Internetbanking angezeigt werden.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung
+25.11.2026;25.11.2026;Muster Tech GmbH;Gehalt/Rente;Gehalt 11/2026;6.082,30;EUR;2.850,00;EUR
+22.11.2026;22.11.2026;Amazon EU S.a.r.L.;Lastschrift;AMZN Mktp DE Bestellung 302-1234567;3.232,30;EUR;-40,99;EUR
+21.11.2026;21.11.2026;Zalando SE;Gutschrift;Retoure Erstattung;3.273,29;EUR;49,95;EUR
+20.11.2026;20.11.2026;Café Kranz;Lastschrift;Kartenzahlung;3.223,34;EUR;-14,80;EUR
+18.11.2026;18.11.2026;Max Mustermann;Überweisung;Umbuchung Extra-Konto Sparen;3.238,14;EUR;-200,00;EUR
+17.11.2026;17.11.2026;Edeka Center Schäfer;Lastschrift;Einkauf;3.438,14;EUR;-32,41;EUR
+15.11.2026;15.11.2026;ARAL Station 123;Lastschrift;Tankstelle Aachener Str.;3.470,55;EUR;-54,62;EUR
+14.11.2026;14.11.2026;HUK-COBURG Versicherung;Lastschrift;Kfz-Haftpflicht Beitrag;3.525,17;EUR;-45,12;EUR
+12.11.2026;12.11.2026;Lieferando.de;Lastschrift;Bestellung Pizza Pasta;3.570,29;EUR;-13,50;EUR
+10.11.2026;10.11.2026;DB Vertrieb GmbH;Lastschrift;Deutschlandticket Abo;3.583,79;EUR;-58,00;EUR
+09.11.2026;09.11.2026;Fitnessstudio FitX;Lastschrift;Mitgliedsbeitrag;3.641,79;EUR;-24,99;EUR
+08.11.2026;08.11.2026;VISA SPARKASSE KOELNBONN;Bargeldauszahlung;GAA Köln Hbf Karte 1234;3.666,78;EUR;-100,00;EUR
+06.11.2026;06.11.2026;VISA LIDL DIENSTLEISTUNG;Lastschrift;Lidl sagt Danke;3.766,78;EUR;-24,66;EUR
+05.11.2026;05.11.2026;Stadtwerke Köln GmbH;Lastschrift;Abschlag Strom/Gas Kundennr. 4711;3.791,44;EUR;-98,00;EUR
+04.11.2026;04.11.2026;Netflix International B.V.;Lastschrift;Netflix Monatsabo;3.889,44;EUR;-13,99;EUR
+03.11.2026;03.11.2026;REWE Markt GmbH;Lastschrift;REWE SAGT DANKE 12345678;3.903,43;EUR;-43,80;EUR
+02.11.2026;02.11.2026;Spotify AB;Lastschrift;Spotify Premium P1234567;3.947,23;EUR;-11,99;EUR
+01.11.2026;01.11.2026;Hausverwaltung Müller & Söhne;Dauerauftrag/Terminüberweisung;Miete Wohnung Kölner Straße 12;3.959,22;EUR;-850,00;EUR
+27.10.2026;27.10.2026;Unbekannter Händler XY;Lastschrift;Kartenzahlung 4711;4.809,22;EUR;-17,50;EUR
+26.10.2026;26.10.2026;Apotheke am Dom;Lastschrift;Kartenzahlung;4.826,72;EUR;-12,95;EUR
+25.10.2026;25.10.2026;Muster Tech GmbH;Gehalt/Rente;Gehalt 10/2026;4.839,67;EUR;2.850,00;EUR
+22.10.2026;22.10.2026;Amazon EU S.a.r.L.;Lastschrift;AMZN Mktp DE Bestellung 302-1234567;1.989,67;EUR;-39,99;EUR
+20.10.2026;20.10.2026;Café Kranz;Lastschrift;Kartenzahlung;2.029,66;EUR;-14,80;EUR
+19.10.2026;19.10.2026;Kino Cinedom;Lastschrift;Ticketkauf;2.044,46;EUR;-24,00;EUR
+18.10.2026;18.10.2026;Max Mustermann;Überweisung;Umbuchung Extra-Konto Sparen;2.068,46;EUR;-200,00;EUR
+17.10.2026;17.10.2026;Edeka Center Schäfer;Lastschrift;Einkauf;2.268,46;EUR;-32,30;EUR
+15.10.2026;15.10.2026;ARAL Station 123;Lastschrift;Tankstelle Aachener Str.;2.300,76;EUR;-55,12;EUR
