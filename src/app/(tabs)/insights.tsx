@@ -18,6 +18,7 @@ import {
   topCounterparties,
   type Period,
 } from '@/domain/stats';
+import { isHorizontalIntent, monthSwipeDirection } from '@/domain/swipe';
 import { ACCOUNT_GIRO, CATEGORY_OTHER } from '@/domain/types';
 import { Card, CategoryBadge, Divider, Icon, SectionTitle } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
@@ -58,10 +59,11 @@ export default function InsightsScreen() {
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 30 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      // Nur klar waagerechte Gesten wechseln den Monat, schräges Scrollen nicht
+      onMoveShouldSetPanResponder: (_, g) => isHorizontalIntent(g.dx, g.dy),
       onPanResponderRelease: (_, g) => {
-        if (g.dx > 60) stepRef.current(-1);
-        else if (g.dx < -60) stepRef.current(1);
+        const dir = monthSwipeDirection(g.dx, g.dy);
+        if (dir !== 0) stepRef.current(dir);
       },
     }),
   ).current;
