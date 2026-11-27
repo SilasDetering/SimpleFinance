@@ -87,5 +87,5 @@ erhalten bei
 Schema-Änderungen laufen über die Migrationen in `src/db/schema.ts` (`PRAGMA user_version`) und
 ändern bestehende Daten nicht.
 
-Verloren gehen die Daten nur, wenn du die App **löschst**. Darum vorher bzw. regelmäßig in der App
-ein Backup exportieren.
+Verloren gehen die Daten nur, wenn du die App **löschst**. Darum vorher bzw. regelmäßig unter
+*Einstellungen → Backup exportieren (JSON)* sichern. Zurückholen geht mit *Backup wiederherstellen*.

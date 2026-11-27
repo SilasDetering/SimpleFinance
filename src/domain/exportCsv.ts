@@ -9,7 +9,7 @@ function cell(value: string): string {
 
 /** Exportiert Buchungen als CSV (Semikolon, deutsche Formate, UTF-8 mit BOM für Excel). */
 export function transactionsToCsv(transactions: Transaction[], categories: Map<string, Category>): string {
-  const header = ['Datum', 'Konto', 'Auftraggeber/Empfänger', 'Buchungstext', 'Verwendungszweck', 'Kategorie', 'Betrag', 'Notiz'];
+  const header = ['Datum', 'Konto', 'Auftraggeber/Empfänger', 'Eigener Name', 'Buchungstext', 'Verwendungszweck', 'Kategorie', 'Betrag', 'Notiz'];
   const lines = [header.join(';')];
   const sorted = [...transactions].sort(
     (a, b) => a.bookingDate.localeCompare(b.bookingDate) || a.dayOrder - b.dayOrder,
@@ -20,6 +20,7 @@ export function transactionsToCsv(transactions: Transaction[], categories: Map<s
         formatDate(tx.bookingDate),
         tx.accountId === ACCOUNT_CASH ? 'Bargeld' : 'ING Girokonto',
         tx.counterparty,
+        tx.alias ?? '',
         tx.bookingText,
         tx.purpose,
         tx.categoryId ? categories.get(tx.categoryId)?.name ?? '' : '',

@@ -1,10 +1,10 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { findConflictingRules, matchesKeyword, suggestKeyword } from '@/domain/categorize';
+import { fieldText, findConflictingRules, matchesKeyword, suggestKeyword } from '@/domain/categorize';
 import type { Category, RuleField, Transaction } from '@/domain/types';
-import { learnRuleFromCorrection } from '@/db/repo';
-import { BottomSheet } from './BottomSheet';
+import { addPromptExclusion, learnRuleFromCorrection } from '@/db/repo';
+import { BottomSheet, useAnySheetOpen } from './BottomSheet';
 import { Button, CategoryBadge } from './components';
 import { useData } from './DataProvider';
 import { font, radius, space, useTheme } from './theme';
@@ -28,12 +28,23 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
   const [keyword, setKeyword] = useState('');
   const [field, setField] = useState<'counterparty' | 'any'>('counterparty');
   const [saving, setSaving] = useState(false);
+  // Sperre gegen doppeltes Antippen, bevor `saving` gerendert ist
+  const busy = useRef(false);
 
-  const ask = useCallback<AskRule>((tx, category) => {
-    setKeyword(suggestKeyword(tx.counterparty));
+  // Anfrage merken und erst zeigen, wenn die Kategorie-Auswahl ganz geschlossen ist
+  const [pending, setPending] = useState<{ tx: Transaction; category: Category } | null>(null);
+  const otherSheetOpen = useAnySheetOpen();
+  const ask = useCallback<AskRule>((tx, category) => setPending({ tx, category }), []);
+
+  useEffect(() => {
+    if (!pending || otherSheetOpen) return;
+    const { tx, category } = pending;
+    setPending(null);
+    // Mit eigenem Namen (z. B. „AldiTalk Flat" bei PayPal) ist der das bessere Stichwort
+    setKeyword(tx.alias?.trim() || suggestKeyword(tx.counterparty));
     setField('counterparty');
     setState({ tx, category });
-  }, []);
+  }, [pending, otherSheetOpen]);
 
   const close = () => setState(null);
 
@@ -43,8 +54,7 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
     if (!state || k.length < 2) return 0;
     return transactions.filter((tx) => {
       if (tx.id === state.tx.id || tx.categoryManual || tx.source !== 'csv') return false;
-      const text = field === 'counterparty' ? tx.counterparty : `${tx.counterparty} ${tx.purpose} ${tx.bookingText}`;
-      return matchesKeyword(text, k);
+      return matchesKeyword(fieldText(tx, field), k);
     }).length;
   }, [transactions, keyword, field, state]);
 
@@ -55,18 +65,33 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
   );
 
   const create = async () => {
-    if (!state || keyword.trim().length < 2) return;
+    if (!state || keyword.trim().length < 2 || busy.current) return;
+    busy.current = true;
     setSaving(true);
     try {
       await learnRuleFromCorrection(db, keyword.trim(), state.category.id, field as RuleField, conflicts.map((r) => r.id));
       await reload();
       close();
     } finally {
+      busy.current = false;
       setSaving(false);
     }
   };
 
   const valid = keyword.trim().length >= 2;
+  const excludeName = state ? suggestKeyword(state.tx.counterparty) : '';
+
+  const neverAsk = async () => {
+    if (!state || busy.current) return;
+    busy.current = true;
+    try {
+      await addPromptExclusion(db, excludeName);
+      await reload();
+      close();
+    } finally {
+      busy.current = false;
+    }
+  };
 
   return (
     <RulePromptContext.Provider value={ask}>
@@ -131,6 +156,13 @@ export function RulePromptProvider({ children }: { children: React.ReactNode }) 
             <View style={{ gap: space.sm }}>
               <Button title={conflicts.length > 0 ? 'Regel ersetzen' : 'Regel anlegen'} onPress={create} disabled={!valid || saving} />
               <Button title="Nur diese Buchung" variant="secondary" onPress={close} />
+              {state.tx.alias ? null : (
+              <Pressable onPress={neverAsk} hitSlop={6} style={styles.neverAsk} accessibilityRole="button">
+                <Text style={[font.small, { color: t.textMuted, textAlign: 'center' }]}>
+                  Für „{excludeName}" nicht mehr fragen
+                </Text>
+              </Pressable>
+              )}
             </View>
           </View>
         ) : null}
@@ -148,6 +180,7 @@ export function useAskRule(): AskRule {
 const styles = StyleSheet.create({
   target: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   input: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 12 },
+  neverAsk: { paddingVertical: space.sm },
   conflict: { borderRadius: radius.md, padding: space.md, gap: 2 },
   fieldChip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 4 },
 });

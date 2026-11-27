@@ -39,11 +39,6 @@ export function categoryTypeOf(entry: LedgerEntry, lookup: CategoryLookup): Cate
   return lookup.get(effectiveCategoryId(entry))?.type ?? 'expense';
 }
 
-/** Zählt die Buchung in Auswertungen (Einnahmen/Ausgaben)? Umbuchungen und Bargeld-Bewegungen nicht. */
-export function countsInStats(entry: LedgerEntry, lookup: CategoryLookup): boolean {
-  return categoryTypeOf(entry, lookup) !== 'transfer';
-}
-
 /** Wirkung einer Buchung auf die Bargeld-Kasse in Cent. */
 export function cashEffect(entry: LedgerEntry): number {
   if (entry.accountId === ACCOUNT_CASH) return entry.amountCents;
@@ -88,4 +83,59 @@ export function incomeExpense(entries: LedgerEntry[], lookup: CategoryLookup): I
     else expense -= e.amountCents;
   }
   return { incomeCents: income, expenseCents: expense, saldoCents: income - expense };
+}
+
+/** Art einer Bargeld-Bewegung, aus Sicht der Kasse. */
+export type CashMovementKind = 'withdrawal' | 'received' | 'spent' | 'deposit';
+
+export interface CashMovement<T extends LedgerEntry = LedgerEntry> {
+  entry: T;
+  kind: CashMovementKind;
+  /** Wirkung auf die Kasse (+ füllt auf, − leert) */
+  effectCents: number;
+  /** Bestand nach dieser Bewegung */
+  balanceAfterCents: number;
+}
+
+export interface CashBreakdown<T extends LedgerEntry = LedgerEntry> {
+  /** Summen je Art, jeweils als positive Zahl */
+  totals: Record<CashMovementKind, { cents: number; count: number }>;
+  balanceCents: number;
+  /** Alle Bewegungen, neueste zuerst */
+  movements: CashMovement<T>[];
+}
+
+export function cashMovementKind(entry: LedgerEntry): CashMovementKind | null {
+  if (entry.accountId === ACCOUNT_CASH) return entry.amountCents >= 0 ? 'received' : 'spent';
+  if (entry.categoryId === CATEGORY_CASH) return entry.amountCents < 0 ? 'withdrawal' : 'deposit';
+  return null;
+}
+
+/**
+ * Schlüsselt den Bargeld-Bestand auf:
+ * Bestand = Abhebungen + Bargeld erhalten − Bar-Ausgaben − Bareinzahlungen.
+ * `entries` dürfen in beliebiger Reihenfolge kommen; für den laufenden Bestand wird nach Datum sortiert
+ * (bei gleichem Datum nach `dayOrder`, falls vorhanden).
+ */
+export function cashBreakdown<T extends LedgerEntry & { dayOrder?: number }>(entries: T[]): CashBreakdown<T> {
+  const totals: CashBreakdown['totals'] = {
+    withdrawal: { cents: 0, count: 0 },
+    received: { cents: 0, count: 0 },
+    spent: { cents: 0, count: 0 },
+    deposit: { cents: 0, count: 0 },
+  };
+  const relevant = entries
+    .map((entry) => ({ entry, kind: cashMovementKind(entry) }))
+    .filter((m): m is { entry: T; kind: CashMovementKind } => m.kind !== null)
+    .sort((a, b) => a.entry.bookingDate.localeCompare(b.entry.bookingDate) || (a.entry.dayOrder ?? 0) - (b.entry.dayOrder ?? 0));
+  let balance = 0;
+  const movements: CashMovement<T>[] = [];
+  for (const { entry, kind } of relevant) {
+    const effect = cashEffect(entry);
+    balance += effect;
+    totals[kind].cents += Math.abs(effect);
+    totals[kind].count++;
+    movements.push({ entry, kind, effectCents: effect, balanceAfterCents: balance });
+  }
+  return { totals, balanceCents: balance, movements: movements.reverse() };
 }

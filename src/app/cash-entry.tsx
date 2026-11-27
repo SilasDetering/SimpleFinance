@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatDate, parseGermanDate, todayIso } from '@/domain/dates';
 import { formatCents, parseGermanAmount } from '@/domain/money';
@@ -29,6 +29,8 @@ export default function CashEntryScreen() {
     existing?.categoryId ?? (kind === 'income' ? CATEGORY_INCOME : CATEGORY_OTHER),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Doppeltes Antippen von „Speichern" darf keine zweite Buchung anlegen
+  const saving = useRef(false);
 
   const allowTypes: CategoryType[] = kind === 'expense' ? ['expense'] : ['income'];
   const category = categoryById.get(categoryId);
@@ -49,7 +51,8 @@ export default function CashEntryScreen() {
   };
 
   const save = async () => {
-    if (!valid) return;
+    if (!valid || saving.current) return;
+    saving.current = true;
     try {
       await addManualCash(
         db,
@@ -59,6 +62,7 @@ export default function CashEntryScreen() {
       await reload();
       router.back();
     } catch (e) {
+      saving.current = false;
       Alert.alert('Speichern fehlgeschlagen', String(e));
     }
   };

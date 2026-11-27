@@ -89,6 +89,24 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
       "UPDATE categories SET icon = 'mci:piggy-bank-outline' WHERE id = 'transfer' AND icon = 'swap-horizontal-outline'",
     );
   },
+  // v3: Empfänger, bei denen nicht nach einer Regel gefragt wird (z. B. PayPal)
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE prompt_exclusions (
+        id TEXT PRIMARY KEY NOT NULL,
+        keyword TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+  },
+  // v4: eigener Name (Alias) pro Buchung, z. B. „AldiTalk Flat" für eine PayPal-Zahlung
+  async (db) => {
+    await db.execAsync('ALTER TABLE transactions ADD COLUMN alias TEXT;');
+  },
+  // v5: Rolle der Kategorie im Monatsbudget (fixed/variable/saving/none); NULL = Standard
+  async (db) => {
+    await db.execAsync('ALTER TABLE categories ADD COLUMN budget_kind TEXT;');
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {
@@ -114,12 +132,13 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   let version = row?.user_version ?? 0;
   while (version < MIGRATIONS.length) {
     const step = MIGRATIONS[version];
+    const next = version + 1;
+    // Versionsnummer in derselben Transaktion setzen: bricht die App mittendrin ab,
+    // wird die Migration beim nächsten Start vollständig wiederholt statt halb übersprungen
     await db.withTransactionAsync(async () => {
       await step(db);
+      await db.execAsync(`PRAGMA user_version = ${next}`);
     });
-    version++;
-    await db.execAsync(`PRAGMA user_version = ${version}`);
+    version = next;
   }
 }
-
-export const SCHEMA_VERSION = MIGRATIONS.length;

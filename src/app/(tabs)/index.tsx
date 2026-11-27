@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { incomeExpense } from '@/domain/cash';
 import { formatDate, formatMonth, monthKey, todayIso } from '@/domain/dates';
+import { groupByMonth } from '@/domain/stats';
 import {
   activeFilterCount,
   EMPTY_FILTER,
@@ -48,6 +49,8 @@ export default function HistoryScreen() {
   const [pickerTx, setPickerTx] = useState<Transaction | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  // Schützt vor doppeltem Antippen, bevor das Overlay sichtbar ist
+  const importBusy = useRef(false);
 
   const uncategorizedCount = useMemo(() => transactions.filter((tx) => !tx.categoryId).length, [transactions]);
 
@@ -61,28 +64,44 @@ export default function HistoryScreen() {
   );
   const visibleSum = useMemo(() => visible.reduce((s, tx) => s + tx.amountCents, 0), [visible]);
 
-  const sections = useMemo<Section[]>(() => {
-    const byMonth = new Map<string, Transaction[]>();
-    for (const tx of transactions) {
-      const key = monthKey(tx.bookingDate);
-      if (!byMonth.has(key)) byMonth.set(key, []);
-      byMonth.get(key)!.push(tx);
-    }
-    return [...byMonth.entries()]
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([key, txs]) => {
-        const data = filtering ? filterTransactions(txs, filter, lookup, currentMonth) : txs;
-        return {
+  // Monats-Saldo immer über alle Buchungen des Monats; hängt nicht vom Filter ab
+  const monthSaldo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [key, txs] of groupByMonth(transactions)) m.set(key, incomeExpense(txs, lookup).saldoCents);
+    return m;
+  }, [transactions, lookup]);
+
+  // Die Liste ist neueste zuerst sortiert, die Gruppierung behält die Reihenfolge bei
+  const sections = useMemo<Section[]>(
+    () =>
+      [...groupByMonth(visible).entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([key, data]) => ({
           key,
           title: formatMonth(key),
-          saldoCents: incomeExpense(txs, lookup).saldoCents,
+          saldoCents: monthSaldo.get(key) ?? 0,
           balanceCents: balances.get(key),
           sumCents: data.reduce((sum, tx) => sum + tx.amountCents, 0),
           data,
-        };
-      })
-      .filter((s) => s.data.length > 0);
-  }, [transactions, lookup, filter, filtering, currentMonth, balances]);
+        })),
+    [visible, monthSaldo, balances],
+  );
+
+  const openTransaction = useCallback(
+    (tx: Transaction) => router.push({ pathname: '/transaction/[id]', params: { id: tx.id } }),
+    [],
+  );
+  const renderItem = useCallback(
+    ({ item }: { item: Transaction }) => (
+      <TransactionRow
+        tx={item}
+        category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
+        onPress={openTransaction}
+        onPressCategory={setPickerTx}
+      />
+    ),
+    [categoryById, openTransaction],
+  );
 
   const filterSummary = [
     filter.kind !== 'all' ? KIND_LABEL[filter.kind] : null,
@@ -99,6 +118,8 @@ export default function HistoryScreen() {
     .join(' · ');
 
   const runImport = useCallback(async () => {
+    if (importBusy.current) return;
+    importBusy.current = true;
     setMenuOpen(false);
     setImporting(true);
     try {
@@ -110,6 +131,7 @@ export default function HistoryScreen() {
         `${summary.duplicateCount} Duplikate übersprungen`,
         `${summary.uncategorizedCount} nicht kategorisiert`,
       ];
+      if (summary.aliasedCount) lines.push(`${summary.aliasedCount} mit eigenem Namen von früheren Buchungen`);
       if (summary.errorCount) lines.push(`${summary.errorCount} Zeilen nicht lesbar`);
       Alert.alert(
         'Import abgeschlossen',
@@ -127,6 +149,7 @@ export default function HistoryScreen() {
         e instanceof CsvFormatError ? e.message : `Die Datei konnte nicht gelesen werden.\n\n${String(e)}`,
       );
     } finally {
+      importBusy.current = false;
       setImporting(false);
     }
   }, [db, reload]);
@@ -246,14 +269,7 @@ export default function HistoryScreen() {
             )}
           </View>
         )}
-        renderItem={({ item }) => (
-          <TransactionRow
-            tx={item}
-            category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
-            onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: item.id } })}
-            onPressCategory={() => setPickerTx(item)}
-          />
-        )}
+        renderItem={renderItem}
         ItemSeparatorComponent={Divider}
         ListEmptyComponent={
           <View style={{ paddingVertical: space.xxl, gap: space.lg }}>

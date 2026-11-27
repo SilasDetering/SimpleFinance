@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { incomeExpense } from '@/domain/cash';
 import { formatDate, formatMonth, formatMonthShort } from '@/domain/dates';
@@ -18,9 +18,11 @@ import {
   topCounterparties,
   type Period,
 } from '@/domain/stats';
+import { isHorizontalIntent, monthSwipeDirection } from '@/domain/swipe';
 import { ACCOUNT_GIRO, CATEGORY_OTHER } from '@/domain/types';
 import { Card, CategoryBadge, Divider, Icon, SectionTitle } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
+import { DonutChart } from '@/ui/DonutChart';
 import { font, radius, space, useTheme } from '@/ui/theme';
 
 export default function InsightsScreen() {
@@ -31,14 +33,23 @@ export default function InsightsScreen() {
   const latest = months[months.length - 1];
   // Ohne explizite Auswahl wird automatisch der neueste Monat gezeigt
   const [chosen, setPeriod] = useState<Period | null>(null);
-  const period: Period =
-    chosen && (chosen.kind === 'all' || months.includes(chosen.month))
-      ? chosen
-      : latest
-        ? { kind: 'month', month: latest }
-        : { kind: 'all' };
+  // Memoisiert, damit die Auswertungen unten nicht bei jedem Render (z. B. jedem Ziehen
+  // über das Donut) neu berechnet werden, nur weil `period` ein neues Objekt ist
+  const period = useMemo<Period>(
+    () =>
+      chosen && (chosen.kind === 'all' || months.includes(chosen.month))
+        ? chosen
+        : latest
+          ? { kind: 'month', month: latest }
+          : { kind: 'all' },
+    [chosen, months, latest],
+  );
   const [barMonths, setBarMonths] = useState<6 | 12>(6);
   const [showAllRecurring, setShowAllRecurring] = useState(false);
+  // Im Donut ausgewählte Kategorie (per Antippen oder Ziehen)
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  // Während der Finger auf dem Donut liegt, scrollt die Seite nicht mit
+  const [chartGesture, setChartGesture] = useState(false);
 
   const monthIndex = period.kind === 'month' ? months.indexOf(period.month) : -1;
   const canPrev = period.kind === 'month' && monthIndex > 0;
@@ -53,10 +64,11 @@ export default function InsightsScreen() {
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 30 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      // Nur klar waagerechte Gesten wechseln den Monat, schräges Scrollen nicht
+      onMoveShouldSetPanResponder: (_, g) => isHorizontalIntent(g.dx, g.dy),
       onPanResponderRelease: (_, g) => {
-        if (g.dx > 60) stepRef.current(-1);
-        else if (g.dx < -60) stepRef.current(1);
+        const dir = monthSwipeDirection(g.dx, g.dy);
+        if (dir !== 0) stepRef.current(dir);
       },
     }),
   ).current;
@@ -65,6 +77,12 @@ export default function InsightsScreen() {
     router.push({
       pathname: '/category-transactions',
       params: { id: categoryId, month: period.kind === 'month' ? period.month : 'all' },
+    });
+
+  const openIncome = () =>
+    router.push({
+      pathname: '/income-transactions',
+      params: { month: period.kind === 'month' ? period.month : 'all' },
     });
 
   const inRange = useMemo(() => transactions.filter((tx) => inPeriod(tx, period)), [transactions, period]);
@@ -87,12 +105,91 @@ export default function InsightsScreen() {
     [transactions],
   );
 
+  const chartWidth = width - space.lg * 4 - 40;
+  const pieValues = useMemo(() => byCategory.map((c) => c.cents), [byCategory]);
+  const pieColors = useMemo(
+    () => byCategory.map((c) => categoryById.get(c.categoryId)?.color ?? t.textFaint),
+    [byCategory, categoryById, t],
+  );
+  const selectedIndex = selectedCat ? byCategory.findIndex((c) => c.categoryId === selectedCat) : -1;
+  const selectedShare = selectedIndex >= 0 ? byCategory[selectedIndex] : null;
+  const catName = (id: string) => categoryById.get(id)?.name ?? (id === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt');
+
+  // Diagramme als memoisierte Elemente: Antippen/Ziehen am Donut rendert sie nicht neu
+  const barChart = useMemo(() => {
+    const barData = bars.flatMap((b) => [
+      {
+        value: b.incomeCents / 100,
+        frontColor: t.income,
+        spacing: 3,
+        label: formatMonthShort(b.month),
+        labelWidth: 34,
+        labelTextStyle: { color: t.textMuted, fontSize: 11 },
+      },
+      { value: b.expenseCents / 100, frontColor: t.dark ? '#5B6270' : '#C7CCD4' },
+    ]);
+    const barGroupWidth = Math.max(8, Math.floor((chartWidth - bars.length * 14) / (bars.length * 2)));
+    return (
+      <BarChart
+        data={barData}
+        barWidth={barGroupWidth}
+        spacing={14}
+        initialSpacing={6}
+        width={chartWidth}
+        height={160}
+        noOfSections={3}
+        barBorderRadius={3}
+        yAxisThickness={0}
+        xAxisThickness={0}
+        rulesColor={t.border}
+        yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
+        formatYLabel={formatAxisLabel}
+        yAxisLabelWidth={40}
+        disableScroll
+        isAnimated={false}
+      />
+    );
+  }, [bars, chartWidth, t]);
+
+  const lineChart = useMemo(() => {
+    const step2 = Math.max(1, Math.ceil(balance.length / 60));
+    const lineData = balance.filter((_, i) => i % step2 === 0 || i === balance.length - 1).map((p) => ({ value: p.cents / 100 }));
+    if (lineData.length <= 1) return null;
+    const lineMin = Math.min(...lineData.map((d) => d.value), 0);
+    return (
+      <LineChart
+        data={lineData}
+        areaChart
+        hideDataPoints
+        thickness={2}
+        color={t.accent}
+        startFillColor={t.accent}
+        endFillColor={t.accent}
+        startOpacity={0.2}
+        endOpacity={0.01}
+        width={chartWidth}
+        height={150}
+        adjustToWidth
+        initialSpacing={0}
+        noOfSections={3}
+        yAxisThickness={0}
+        xAxisThickness={0}
+        rulesColor={t.border}
+        yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
+        formatYLabel={formatAxisLabel}
+        yAxisLabelWidth={40}
+        mostNegativeValue={lineMin < 0 ? lineMin : undefined}
+        disableScroll
+        isAnimated={false}
+      />
+    );
+  }, [balance, chartWidth, t]);
+
   if (transactions.length === 0) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
         <View style={{ padding: space.lg }}>
-          <Text style={[font.title, { color: t.text, marginTop: space.sm }]}>Auswertungen</Text>
-          <Text style={[font.body, { color: t.textMuted, marginTop: space.xl }]}>
+          <Text style={[font.body, { color: t.textMuted, marginTop: space.sm }]}>
             Sobald du eine CSV importiert hast, findest du hier deine Übersicht.
           </Text>
         </View>
@@ -100,33 +197,15 @@ export default function InsightsScreen() {
     );
   }
 
-  const chartWidth = width - space.lg * 4 - 40;
-  const pieData = byCategory.map((c) => ({
-    value: c.cents,
-    color: categoryById.get(c.categoryId)?.color ?? t.textFaint,
-  }));
-  const barData = bars.flatMap((b) => [
-    {
-      value: b.incomeCents / 100,
-      frontColor: t.income,
-      spacing: 3,
-      label: formatMonthShort(b.month),
-      labelWidth: 34,
-      labelTextStyle: { color: t.textMuted, fontSize: 11 },
-    },
-    { value: b.expenseCents / 100, frontColor: t.dark ? '#5B6270' : '#C7CCD4' },
-  ]);
-  const barGroupWidth = Math.max(8, Math.floor((chartWidth - bars.length * 14) / (bars.length * 2)));
-  const step2 = Math.max(1, Math.ceil(balance.length / 60));
-  const lineData = balance.filter((_, i) => i % step2 === 0 || i === balance.length - 1).map((p) => ({ value: p.cents / 100 }));
-  const lineMin = Math.min(...lineData.map((d) => d.value), 0);
   const recurringShown = showAllRecurring ? recurring : recurring.slice(0, 4);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.lg }} {...pan.panHandlers}>
-        <Text style={[font.title, { color: t.text, marginTop: space.sm }]}>Auswertungen</Text>
-
+      <ScrollView
+        scrollEnabled={!chartGesture}
+        contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl, gap: space.lg }}
+        {...pan.panHandlers}
+      >
         {/* Zeitraum-Auswahl */}
         <View style={styles.periodRow}>
           <Pressable onPress={() => step(-1)} disabled={!canPrev} hitSlop={10} style={{ opacity: canPrev ? 1 : 0.25 }} accessibilityLabel="Vorheriger Monat">
@@ -156,7 +235,7 @@ export default function InsightsScreen() {
         {/* Kennzahlen */}
         <Card>
           <View style={styles.kpis}>
-            <Kpi label="Einnahmen" value={formatCents(totals.incomeCents)} color={t.income} />
+            <Kpi label="Einnahmen" value={formatCents(totals.incomeCents)} color={t.income} onPress={openIncome} />
             <Kpi label="Ausgaben" value={formatCents(totals.expenseCents)} />
           </View>
           <Divider />
@@ -174,34 +253,51 @@ export default function InsightsScreen() {
           ) : (
             <>
               <View style={{ alignItems: 'center', paddingVertical: space.md }}>
-                <PieChart
-                  data={pieData}
-                  donut
-                  radius={88}
-                  innerRadius={64}
-                  innerCircleColor={t.surface}
-                  strokeWidth={2}
-                  strokeColor={t.surface}
-                  centerLabelComponent={() => (
-                    <View style={{ alignItems: 'center' }}>
+                <DonutChart
+                  values={pieValues}
+                  colors={pieColors}
+                  gapColor={t.surface}
+                  selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
+                  onSelect={(i) => setSelectedCat(i === null ? null : byCategory[i]?.categoryId ?? null)}
+                  onGestureActive={setChartGesture}
+                  onPressCenter={() => (selectedShare ? openCategory(selectedShare.categoryId) : undefined)}
+                  onPressSelected={() => setSelectedCat(null)}
+                >
+                  {selectedShare ? (
+                    <>
+                      <Text style={[font.caption, { color: t.textMuted, textAlign: 'center' }]} numberOfLines={1}>
+                        {catName(selectedShare.categoryId)}
+                      </Text>
+                      <Text style={[font.bodyStrong, { color: t.text }]}>{formatCentsShort(selectedShare.cents)}</Text>
+                      <Text style={[font.small, { color: t.textMuted }]}>{formatPercent(selectedShare.share)}</Text>
+                    </>
+                  ) : (
+                    <>
                       <Text style={[font.caption, { color: t.textMuted }]}>Ausgaben</Text>
                       <Text style={[font.bodyStrong, { color: t.text }]}>{formatCentsShort(totals.expenseCents)}</Text>
-                    </View>
+                    </>
                   )}
-                />
+                </DonutChart>
               </View>
               {byCategory.map((c) => {
                 const cat = categoryById.get(c.categoryId);
+                const isSelected = c.categoryId === selectedCat;
                 return (
                   <Pressable
                     key={c.categoryId}
                     onPress={() => openCategory(c.categoryId)}
-                    style={({ pressed }) => [styles.catRow, { opacity: pressed ? 0.6 : 1 }]}
+                    style={({ pressed }) => [
+                      styles.catRow,
+                      styles.catRowSelectable,
+                      { opacity: pressed ? 0.6 : selectedCat && !isSelected ? 0.45 : 1 },
+                      isSelected && { backgroundColor: `${cat?.color ?? t.textFaint}22` },
+                    ]}
                     accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
                   >
                     <View style={[styles.dot, { backgroundColor: cat?.color ?? t.textFaint }]} />
-                    <Text style={[font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
-                      {cat?.name ?? (c.categoryId === CATEGORY_OTHER ? 'Sonstiges' : 'Unbekannt')}
+                    <Text style={[isSelected ? font.bodyStrong : font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
+                      {catName(c.categoryId)}
                     </Text>
                     <Text style={[font.small, { color: t.textMuted, width: 48, textAlign: 'right' }]}>{formatPercent(c.share)}</Text>
                     <Text style={[font.bodyStrong, { color: t.text, minWidth: 88, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>
@@ -261,24 +357,7 @@ export default function InsightsScreen() {
           >
             Einnahmen vs. Ausgaben
           </SectionTitle>
-          <BarChart
-            data={barData}
-            barWidth={barGroupWidth}
-            spacing={14}
-            initialSpacing={6}
-            width={chartWidth}
-            height={160}
-            noOfSections={3}
-            barBorderRadius={3}
-            yAxisThickness={0}
-            xAxisThickness={0}
-            rulesColor={t.border}
-            yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
-            formatYLabel={(l: string) => formatCentsShort(Number(l) * 100).replace(' €', '')}
-            yAxisLabelWidth={40}
-            disableScroll
-            isAnimated={false}
-          />
+          {barChart}
           <View style={styles.legend}>
             <Legend color={t.income} label="Einnahmen" />
             <Legend color={t.dark ? '#5B6270' : '#C7CCD4'} label="Ausgaben" />
@@ -342,34 +421,10 @@ export default function InsightsScreen() {
         </Card>
 
         {/* Kontostand-Verlauf */}
-        {lineData.length > 1 ? (
+        {lineChart ? (
           <Card>
             <SectionTitle>Kontostand-Verlauf</SectionTitle>
-            <LineChart
-              data={lineData}
-              areaChart
-              hideDataPoints
-              thickness={2}
-              color={t.accent}
-              startFillColor={t.accent}
-              endFillColor={t.accent}
-              startOpacity={0.2}
-              endOpacity={0.01}
-              width={chartWidth}
-              height={150}
-              adjustToWidth
-              initialSpacing={0}
-              noOfSections={3}
-              yAxisThickness={0}
-              xAxisThickness={0}
-              rulesColor={t.border}
-              yAxisTextStyle={{ color: t.textFaint, fontSize: 10 }}
-              formatYLabel={(l: string) => formatCentsShort(Number(l) * 100).replace(' €', '')}
-              yAxisLabelWidth={40}
-              mostNegativeValue={lineMin < 0 ? lineMin : undefined}
-              disableScroll
-              isAnimated={false}
-            />
+            {lineChart}
             <View style={[styles.legend, { justifyContent: 'space-between' }]}>
               <Text style={[font.small, { color: t.textFaint }]}>{formatDate(balance[0].date)}</Text>
               <Text style={[font.small, { color: t.textFaint }]}>{formatDate(balance[balance.length - 1].date)}</Text>
@@ -378,21 +433,29 @@ export default function InsightsScreen() {
         ) : null}
 
         {/* Bargeld */}
-        <Card>
-          <SectionTitle>Bargeld-Bestand</SectionTitle>
-          <Text style={[font.title, { color: cashBalanceCents < 0 ? t.warning : t.text }]}>{formatCents(cashBalanceCents)}</Text>
-          <Text style={[font.small, { color: t.textMuted, marginTop: 2 }]}>
-            Abhebungen minus Bar-Ausgaben und Einzahlungen. Zählt nicht zum Kontostand.
-          </Text>
-          {cashBalanceCents < 0 ? (
-            <View style={[styles.warning, { backgroundColor: t.warningBg }]}>
-              <Icon name="alert-circle-outline" size={18} color={t.warning} />
-              <Text style={[font.small, { color: t.warning, flex: 1 }]}>
-                Der Bestand ist negativ. Wahrscheinlich fehlt eine Abhebung oder erhaltenes Bargeld.
-              </Text>
-            </View>
-          ) : null}
-        </Card>
+        <Pressable
+          onPress={() => router.push('/cash')}
+          accessibilityRole="button"
+          accessibilityLabel="Bargeld-Bestand aufschlüsseln"
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <Card>
+            <SectionTitle right={<Icon name="chevron-forward" size={16} color={t.textFaint} />}>Bargeld-Bestand</SectionTitle>
+            <Text style={[font.title, { color: cashBalanceCents < 0 ? t.warning : t.text }]}>{formatCents(cashBalanceCents)}</Text>
+            <Text style={[font.small, { color: t.textMuted, marginTop: 2 }]}>
+              Abhebungen und erhaltenes Bargeld minus Bar-Ausgaben und Einzahlungen. Zählt nicht zum Kontostand.
+              Antippen für alle Buchungen dazu.
+            </Text>
+            {cashBalanceCents < 0 ? (
+              <View style={[styles.warning, { backgroundColor: t.warningBg }]}>
+                <Icon name="alert-circle-outline" size={18} color={t.warning} />
+                <Text style={[font.small, { color: t.warning, flex: 1 }]}>
+                  Der Bestand ist negativ. Wahrscheinlich fehlt eine Abhebung oder erhaltenes Bargeld.
+                </Text>
+              </View>
+            ) : null}
+          </Card>
+        </Pressable>
 
         <Text style={[font.small, { color: t.textFaint, textAlign: 'center' }]}>
           Umbuchungen und Bargeld-Abhebungen sind ausgeblendet. Bar-Ausgaben zählen in ihrer Kategorie.
@@ -402,13 +465,29 @@ export default function InsightsScreen() {
   );
 }
 
-function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
+const formatAxisLabel = (l: string) => formatCentsShort(Number(l) * 100).replace(' €', '');
+
+function Kpi({ label, value, color, onPress }: { label: string; value: string; color?: string; onPress?: () => void }) {
   const t = useTheme();
-  return (
-    <View style={{ flex: 1, paddingBottom: space.md }}>
-      <Text style={[font.small, { color: t.textMuted }]}>{label}</Text>
+  const content = (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+        <Text style={[font.small, { color: t.textMuted }]}>{label}</Text>
+        {onPress ? <Icon name="chevron-forward" size={12} color={t.textFaint} /> : null}
+      </View>
       <Text style={[font.h2, { color: color ?? t.text, fontVariant: ['tabular-nums'] }]}>{value}</Text>
-    </View>
+    </>
+  );
+  if (!onPress) return <View style={{ flex: 1, paddingBottom: space.md }}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} anzeigen`}
+      style={({ pressed }) => ({ flex: 1, paddingBottom: space.md, opacity: pressed ? 0.6 : 1 })}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -428,6 +507,7 @@ const styles = StyleSheet.create({
   segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm },
   kpis: { flexDirection: 'row', gap: space.lg },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8 },
+  catRowSelectable: { marginHorizontal: -space.sm, paddingHorizontal: space.sm, borderRadius: radius.md },
   dot: { width: 10, height: 10, borderRadius: 5 },
   legend: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
   warning: { flexDirection: 'row', gap: space.sm, alignItems: 'center', padding: space.md, borderRadius: radius.md, marginTop: space.md },

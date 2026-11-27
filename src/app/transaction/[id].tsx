@@ -5,7 +5,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { formatDate } from '@/domain/dates';
 import { formatCents } from '@/domain/money';
 import { ACCOUNT_CASH, CATEGORY_CASH } from '@/domain/types';
-import { deleteTransaction, setTransactionNote } from '@/db/repo';
+import { deleteTransaction, setTransactionAlias, setTransactionNote } from '@/db/repo';
 import { CategoryPicker } from '@/ui/CategoryPicker';
 import { Button, CategoryBadge, Divider, Icon } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
@@ -21,10 +21,12 @@ export default function TransactionDetail() {
   const changeCategory = useCategoryChange();
   const tx = useMemo(() => transactions.find((x) => x.id === id), [transactions, id]);
   const [note, setNote] = useState(tx?.note ?? '');
+  const [alias, setAlias] = useState(tx?.alias ?? '');
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     setNote(tx?.note ?? '');
+    setAlias(tx?.alias ?? '');
   }, [tx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!tx) {
@@ -43,6 +45,12 @@ export default function TransactionDetail() {
     await reload();
   };
 
+  const saveAlias = async () => {
+    if ((tx.alias ?? '') === alias.trim()) return;
+    await setTransactionAlias(db, tx.id, alias);
+    await reload();
+  };
+
   const remove = () =>
     Alert.alert('Buchung löschen?', 'Die manuelle Bargeld-Buchung wird entfernt.', [
       { text: 'Abbrechen', style: 'cancel' },
@@ -51,8 +59,9 @@ export default function TransactionDetail() {
         style: 'destructive',
         onPress: async () => {
           await deleteTransaction(db, tx.id);
-          await reload();
+          // Erst zurück, dann neu laden: sonst blitzt kurz „Buchung nicht gefunden" auf
           router.back();
+          await reload();
         },
       },
     ]);
@@ -60,6 +69,7 @@ export default function TransactionDetail() {
   const rows: [string, string][] = [
     ['Datum', formatDate(tx.bookingDate)],
     ...(tx.valueDate && tx.valueDate !== tx.bookingDate ? ([['Valuta', formatDate(tx.valueDate)]] as [string, string][]) : []),
+    ...(tx.alias && tx.counterparty ? ([['Empfänger', tx.counterparty]] as [string, string][]) : []),
     ['Konto', isCash ? 'Bargeld-Kasse' : 'ING Girokonto'],
     ...(tx.bookingText ? ([['Buchungstext', tx.bookingText]] as [string, string][]) : []),
     ...(tx.purpose ? ([['Verwendungszweck', tx.purpose]] as [string, string][]) : []),
@@ -86,6 +96,9 @@ export default function TransactionDetail() {
         <View style={{ alignItems: 'center', gap: space.sm, paddingTop: space.md }}>
           <CategoryBadge category={category} size={56} />
           <Text style={[font.h2, { color: t.text, textAlign: 'center' }]}>{displayTitle(tx)}</Text>
+          {tx.alias && tx.counterparty ? (
+            <Text style={[font.small, { color: t.textMuted, textAlign: 'center' }]}>{tx.counterparty}</Text>
+          ) : null}
           <Text
             style={[
               font.title,
@@ -131,6 +144,26 @@ export default function TransactionDetail() {
           ))}
         </View>
 
+        {!isCash ? (
+          <View style={{ gap: space.sm }}>
+            <Text style={[font.caption, { color: t.textMuted, textTransform: 'uppercase' }]}>Eigener Name</Text>
+            <TextInput
+              value={alias}
+              onChangeText={setAlias}
+              onBlur={saveAlias}
+              onSubmitEditing={saveAlias}
+              placeholder="z. B. AldiTalk Flat"
+              placeholderTextColor={t.textFaint}
+              returnKeyType="done"
+              style={[font.body, styles.input, styles.singleLine, { color: t.text, backgroundColor: t.surface }]}
+            />
+            <Text style={[font.small, { color: t.textMuted }]}>
+              Wird statt „{tx.counterparty || 'Empfänger'}" angezeigt. Regeln prüfen den Namen mit, so lässt sich z. B. eine
+              PayPal-Zahlung gezielt einer Kategorie zuordnen.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={{ gap: space.sm }}>
           <Text style={[font.caption, { color: t.textMuted, textTransform: 'uppercase' }]}>Notiz</Text>
           <TextInput
@@ -172,4 +205,5 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space.lg, paddingVertical: space.md },
   input: { borderRadius: radius.md, padding: space.md, minHeight: 80, textAlignVertical: 'top' },
+  singleLine: { minHeight: 0 },
 });

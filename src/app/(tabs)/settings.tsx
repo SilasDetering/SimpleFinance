@@ -2,12 +2,19 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { todayIso } from '@/domain/dates';
 import { transactionsToCsv } from '@/domain/exportCsv';
 import { BackupFormatError, describeBackup, parseBackup } from '@/domain/backup';
-import { deleteAllData, exportBackup, recategorizeAll, restoreBackup } from '@/db/repo';
+import {
+  addPromptExclusion,
+  deleteAllData,
+  deletePromptExclusion,
+  exportBackup,
+  recategorizeAll,
+  restoreBackup,
+} from '@/db/repo';
 import { pickTextFile } from '@/ui/importCsv';
 import { CategoryBadge, Divider, Icon, ListRow } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
@@ -17,8 +24,21 @@ import { font, radius, space, useTheme } from '@/ui/theme';
 export default function SettingsScreen() {
   const t = useTheme();
   const db = useSQLiteContext();
-  const { categories, categoryById, rules, transactions, reload } = useData();
+  const { categories, categoryById, rules, transactions, promptExclusions, reload } = useData();
   const [busy, setBusy] = useState(false);
+  const [newExclusion, setNewExclusion] = useState('');
+
+  const addExclusion = async () => {
+    if (!newExclusion.trim()) return;
+    await addPromptExclusion(db, newExclusion);
+    setNewExclusion('');
+    await reload();
+  };
+
+  const removeExclusion = async (id: string) => {
+    await deletePromptExclusion(db, id);
+    await reload();
+  };
 
   const ruleCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -137,6 +157,46 @@ export default function SettingsScreen() {
         </View>
 
         <View>
+          <Text style={[styles.section, font.caption, { color: t.textMuted }]}>Ohne Regel-Nachfrage</Text>
+          <Text style={[font.small, { color: t.textMuted, marginBottom: space.sm }]}>
+            Bei diesen Empfängern fragt die App nach dem Umkategorisieren nicht, ob eine Regel angelegt werden soll
+            (z. B. PayPal, wo jede Buchung etwas anderes ist).
+          </Text>
+          <View style={[styles.group, { backgroundColor: t.surface, paddingVertical: space.sm }]}>
+            {promptExclusions.map((e, i) => (
+              <View key={e.id}>
+                {i > 0 ? <Divider /> : null}
+                <View style={styles.exclusionRow}>
+                  <Text style={[font.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
+                    {e.keyword}
+                  </Text>
+                  <Pressable onPress={() => removeExclusion(e.id)} hitSlop={10} accessibilityLabel={`${e.keyword} entfernen`}>
+                    <Icon name="close-circle" size={20} color={t.textFaint} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+            {promptExclusions.length > 0 ? <Divider /> : null}
+            <View style={styles.exclusionRow}>
+              <TextInput
+                value={newExclusion}
+                onChangeText={setNewExclusion}
+                onSubmitEditing={addExclusion}
+                placeholder="Empfänger hinzufügen, z. B. PayPal"
+                placeholderTextColor={t.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                style={[font.body, { color: t.text, flex: 1, paddingVertical: 4 }]}
+              />
+              <Pressable onPress={addExclusion} hitSlop={10} accessibilityLabel="Empfänger hinzufügen" disabled={!newExclusion.trim()}>
+                <Icon name="add-circle" size={22} color={newExclusion.trim() ? t.text : t.textFaint} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        <View>
           <Text style={[styles.section, font.caption, { color: t.textMuted }]}>Daten</Text>
           <View style={[styles.group, { backgroundColor: t.surface }]}>
             <ListRow title="Buchungen als CSV exportieren" left={<Icon name="document-text-outline" size={20} color={t.text} />} onPress={exportCsv} chevron={false} />
@@ -174,6 +234,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   section: { textTransform: 'uppercase', marginBottom: space.sm },
   group: { borderRadius: radius.lg, paddingHorizontal: space.lg },
+  exclusionRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   plus: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

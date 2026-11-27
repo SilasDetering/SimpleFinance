@@ -16,6 +16,10 @@ import { parseIngCsv } from '@/domain/ingCsv';
 import { ACCOUNT_GIRO } from '@/domain/types';
 import {
   addManualCash,
+  addPromptExclusion,
+  setTransactionAlias,
+  deletePromptExclusion,
+  getPromptExclusions,
   deleteAllData,
   exportBackup,
   getRules,
@@ -26,6 +30,9 @@ import {
   getTransactions,
   importParsedCsv,
   learnRuleFromCorrection,
+  recategorizeAll,
+  saveCategory,
+  setCategoryBudgetKind,
   setTransactionCategory,
 } from '../repo';
 import { migrate } from '../schema';
@@ -75,6 +82,19 @@ describe('Repository', () => {
     expect(cats.find((c) => c.id === 'cash')?.isSystem).toBe(true);
   });
 
+  it('speichert die Budget-Rolle einer Kategorie, auch im Backup', async () => {
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.budgetKind).toBeNull();
+    await setCategoryBudgetKind(db, 'groceries', 'variable');
+    const id = await saveCategory(db, { name: 'ETF', color: '#000000', icon: 'cart-outline', type: 'expense', budgetKind: 'saving' });
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.budgetKind).toBeNull();
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    const cats = await getCategories(db);
+    expect(cats.find((c) => c.id === 'groceries')?.budgetKind).toBe('variable');
+    expect(cats.find((c) => c.id === id)?.budgetKind).toBe('saving');
+  });
+
   it('importiert, kategorisiert und überspringt Duplikate bei Überlappung', async () => {
     const first = await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
     expect(first.newCount).toBe(61);
@@ -92,6 +112,31 @@ describe('Repository', () => {
     expect(new Set(txs.map((t) => t.dedupKey)).size).toBe(txs.length);
     expect(txs.find((t) => t.bookingText === 'Bargeldauszahlung')?.categoryId).toBe('cash');
     expect(txs.find((t) => t.bookingText === 'Bareinzahlung')?.categoryId).toBe('cash');
+  });
+
+  it('gleichzeitige Schreibvorgänge laufen nacheinander statt sich zu überschneiden', async () => {
+    const parsed = sample('ing-beispiel-aug-okt.csv');
+    // Doppelt angetippter Import + direkt danach „Regeln anwenden": ohne Warteschlange
+    // würde die zweite Transaktion mit „cannot start a transaction within a transaction" scheitern
+    const [a, b, changed] = await Promise.all([
+      importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed),
+      importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed),
+      recategorizeAll(db),
+    ]);
+    expect(a.newCount).toBe(parsed.transactions.length);
+    expect(b.newCount).toBe(0);
+    expect(b.duplicateCount).toBe(parsed.transactions.length);
+    expect(changed).toBe(0);
+    expect(await getTransactions(db)).toHaveLength(parsed.transactions.length);
+  });
+
+  it('eine fehlgeschlagene Transaktion blockiert die folgenden nicht', async () => {
+    await expect(deleteCategory(db, 'cash')).rejects.toThrow();
+    const parsed = sample('ing-beispiel-aug-okt.csv');
+    const broken = { ...parsed, transactions: [{ ...parsed.transactions[0], amountCents: null as never }] };
+    await expect(importParsedCsv(db, ACCOUNT_GIRO, 'kaputt.csv', broken)).rejects.toThrow();
+    const ok = await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed);
+    expect(ok.newCount).toBe(parsed.transactions.length);
   });
 
   it('Kontostand kommt aus dem neuesten Export', async () => {
@@ -223,5 +268,70 @@ describe('Repository', () => {
     expect(auto.every((t) => t.categoryId === 'shopping')).toBe(true);
     // manuell gesetzte Kategorien bleiben unangetastet
     expect(txs.find((t) => t.id === first.id)?.categoryId).toBe('leisure');
+  });
+
+  it('verwaltet Empfänger ohne Regel-Nachfrage (ohne Duplikate, inkl. Backup)', async () => {
+    await addPromptExclusion(db, '  PayPal ');
+    await addPromptExclusion(db, 'paypal');
+    await addPromptExclusion(db, 'Amazon');
+    let ex = await getPromptExclusions(db);
+    expect(ex.map((e) => e.keyword)).toEqual(['Amazon', 'PayPal']);
+
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    expect(await getPromptExclusions(db)).toHaveLength(0);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    ex = await getPromptExclusions(db);
+    expect(ex.map((e) => e.keyword)).toEqual(['Amazon', 'PayPal']);
+
+    await deletePromptExclusion(db, ex[0].id);
+    expect((await getPromptExclusions(db)).map((e) => e.keyword)).toEqual(['PayPal']);
+  });
+
+  it('ältere Backups ohne Ausnahmeliste lassen sich weiterhin laden', async () => {
+    const backup = await exportBackup(db) as unknown as Record<string, unknown>;
+    delete backup.prompt_exclusions;
+    const parsed = parseBackup(JSON.stringify(backup));
+    expect(parsed.prompt_exclusions).toEqual([]);
+    await restoreBackup(db, parsed);
+    expect(await getPromptExclusions(db)).toHaveLength(0);
+  });
+
+  it('eigener Name (Alias) wird angezeigt, von Regeln geprüft und gesichert', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const tx = (await getTransactions(db)).find((t) => t.amountCents < 0 && t.source === 'csv')!;
+    expect(tx.alias).toBeNull();
+    await learnRuleFromCorrection(db, 'AldiTalk Flat', 'leisure');
+    // Regel lernen setzt nur die Regel – die Buchung trifft sie erst mit dem Alias
+    await setTransactionAlias(db, tx.id, '  AldiTalk Flat ');
+    let after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBe('AldiTalk Flat');
+    expect(after.counterparty).toBe(tx.counterparty);
+    expect(after.categoryId).toBe('leisure');
+
+    const backup = await exportBackup(db);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBe('AldiTalk Flat');
+
+    await setTransactionAlias(db, tx.id, '');
+    after = (await getTransactions(db)).find((t) => t.id === tx.id)!;
+    expect(after.alias).toBeNull();
+    expect(after.categoryId).toBe(tx.categoryId);
+  });
+
+  it('übernimmt beim Import den eigenen Namen passender früherer Buchungen', async () => {
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', sample('ing-beispiel-aug-okt.csv'));
+    const oct = (await getTransactions(db)).find((t) => t.counterparty === 'Spotify AB' && t.bookingDate === '2026-10-02')!;
+    await learnRuleFromCorrection(db, 'Musik-Abo', 'leisure');
+    await setTransactionAlias(db, oct.id, 'Musik-Abo');
+
+    const summary = await importParsedCsv(db, ACCOUNT_GIRO, 'b.csv', sample('ing-beispiel-okt-nov-ueberlappend.csv'));
+    expect(summary.aliasedCount).toBe(1);
+    const nov = (await getTransactions(db)).find((t) => t.counterparty === 'Spotify AB' && t.bookingDate === '2026-11-02')!;
+    expect(nov.alias).toBe('Musik-Abo');
+    expect(nov.categoryId).toBe('leisure');
+    // andere neue Buchungen bleiben ohne Namen
+    expect((await getTransactions(db)).filter((t) => t.alias).map((t) => t.bookingDate).sort()).toEqual(['2026-10-02', '2026-11-02']);
   });
 });

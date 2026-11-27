@@ -2,10 +2,13 @@ import { toLookup, type LedgerEntry } from '../cash';
 import { DEFAULT_CATEGORIES } from '../defaults';
 import { detectRecurring, recurringTotal } from '../recurring';
 import {
+  categoryMonthlySeries,
   balanceSeries,
   entriesForCategory,
   categoryVsAverage,
   expensesByCategory,
+  incomeEntries,
+  incomeMonthlySeries,
   monthlySeries,
   savingsRate,
   topCounterparties,
@@ -145,5 +148,72 @@ describe('entriesForCategory', () => {
     );
     expect(entriesForCategory(entries, lookup, 'other', month)).toHaveLength(1);
     expect(entriesForCategory(entries, lookup, 'groceries', { kind: 'all' })).toHaveLength(3);
+  });
+});
+
+describe('categoryMonthlySeries', () => {
+  it('zeigt alle Monate mit Daten, Lücken als 0, Erstattungen verrechnet', () => {
+    const entries = [
+      e('2026-08-03', -5000, 'groceries'),
+      e('2026-08-20', 1000, 'groceries'), // Erstattung
+      e('2026-09-10', -2000, 'leisure'),
+      e('2026-10-05', -3000, 'groceries'),
+      e('2026-10-06', -100000, 'cash'), // Abhebung zählt nicht
+    ];
+    expect(categoryMonthlySeries(entries, lookup, 'groceries')).toEqual([
+      { month: '2026-08', cents: 4000 },
+      { month: '2026-09', cents: 0 },
+      { month: '2026-10', cents: 3000 },
+    ]);
+  });
+
+  it('begrenzt auf die letzten 12 Monate', () => {
+    const entries = Array.from({ length: 18 }, (_, i) => {
+      const y = 2025 + Math.floor(i / 12);
+      const m = String((i % 12) + 1).padStart(2, '0');
+      return e(`${y}-${m}-15`, -1000 * (i + 1), 'groceries');
+    });
+    const s = categoryMonthlySeries(entries, lookup, 'groceries');
+    expect(s).toHaveLength(12);
+    expect(s[0]).toEqual({ month: '2025-07', cents: 7000 });
+    expect(s[11]).toEqual({ month: '2026-06', cents: 18000 });
+  });
+
+  it('Einnahme-Kategorien zählen positiv', () => {
+    expect(categoryMonthlySeries([e('2026-10-01', 250000, 'income')], lookup, 'income')).toEqual([
+      { month: '2026-10', cents: 250000 },
+    ]);
+  });
+});
+
+describe('incomeEntries', () => {
+  it('liefert nur Einnahmen des Monats, ohne Umbuchungen und Bargeld', () => {
+    const entries = [
+      e('2026-11-01', 285000, 'income', 'Arbeitgeber'),
+      e('2026-11-02', 2000, 'income', 'Oma', ACCOUNT_CASH),
+      e('2026-11-03', -3000, 'groceries'),
+      e('2026-11-04', 5000, 'cash'), // Bareinzahlung
+      e('2026-11-05', 20000, 'transfer'),
+      e('2026-10-25', 285000, 'income'),
+    ];
+    const r = incomeEntries(entries, lookup, { kind: 'month', month: '2026-11' });
+    expect(r.map((x) => x.counterparty)).toEqual(['Arbeitgeber', 'Oma']);
+    expect(incomeEntries(entries, lookup, { kind: 'all' })).toHaveLength(3);
+  });
+});
+
+describe('incomeMonthlySeries', () => {
+  it('summiert Einnahmen je Monat, Lücken als 0', () => {
+    const entries = [
+      e('2026-08-25', 280000, 'income'),
+      e('2026-09-10', -2000, 'leisure'),
+      e('2026-10-25', 285000, 'income'),
+      e('2026-10-26', 1500, 'income'),
+    ];
+    expect(incomeMonthlySeries(entries, lookup)).toEqual([
+      { month: '2026-08', cents: 280000 },
+      { month: '2026-09', cents: 0 },
+      { month: '2026-10', cents: 286500 },
+    ]);
   });
 });
