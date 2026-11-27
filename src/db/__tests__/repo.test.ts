@@ -31,6 +31,8 @@ import {
   importParsedCsv,
   learnRuleFromCorrection,
   recategorizeAll,
+  saveCategory,
+  setCategoryBudgetKind,
   setTransactionCategory,
 } from '../repo';
 import { migrate } from '../schema';
@@ -78,6 +80,19 @@ describe('Repository', () => {
     const cats = await getCategories(db);
     expect(cats).toHaveLength(13);
     expect(cats.find((c) => c.id === 'cash')?.isSystem).toBe(true);
+  });
+
+  it('speichert die Budget-Rolle einer Kategorie, auch im Backup', async () => {
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.budgetKind).toBeNull();
+    await setCategoryBudgetKind(db, 'groceries', 'variable');
+    const id = await saveCategory(db, { name: 'ETF', color: '#000000', icon: 'cart-outline', type: 'expense', budgetKind: 'saving' });
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.budgetKind).toBeNull();
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    const cats = await getCategories(db);
+    expect(cats.find((c) => c.id === 'groceries')?.budgetKind).toBe('variable');
+    expect(cats.find((c) => c.id === id)?.budgetKind).toBe('saving');
   });
 
   it('importiert, kategorisiert und überspringt Duplikate bei Überlappung', async () => {

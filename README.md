@@ -33,7 +33,7 @@ Die Datenbank-Tests laufen gegen echtes SQLite (`node:sqlite`, Node ≥ 22).
 
 ```
 src/
-  app/            Screens (Expo Router): Verlauf, Auswertungen, Einstellungen, Details, Bargeld, Kategorie
+  app/            Screens (Expo Router): Verlauf, Auswertungen, Budget, Einstellungen, Details, Bargeld, Kategorie
   domain/         Reine TypeScript-Logik ohne React/Expo, komplett getestet
     ingCsv.ts       ING-CSV-Parser (Kopfzeile wird gesucht, Spalten per Name)
     encoding.ts     UTF-8 / ISO-8859-1 (Windows-1252) erkennen und dekodieren
@@ -42,6 +42,7 @@ src/
     cash.ts         Bargeld-Kasse und Einnahmen/Ausgaben-Logik
     stats.ts        Auswertungen (Kategorien, Monate, Durchschnitt, Top-Empfänger, Kontostand)
     recurring.ts    Erkennung von Fixkosten/Abos
+    budget.ts       Monatsbudget (regelmäßige Einnahmen − Fixkosten − Sparen)
   db/             SQLite-Schema, Migrationen, Repository
   ui/             Theme (hell/dunkel), Komponenten, Bottom Sheet, Kategorie-Auswahl
 samples/          Beispiel-CSVs + Generator
@@ -61,6 +62,16 @@ samples/          Beispiel-CSVs + Generator
 | Bargeld erhalten (manuell, z. B. Geschenk) | + Betrag | Einnahme |
 
 Die Kasse fließt nicht in den Kontostand ein. Ist der Bestand negativ, zeigt die App einen Hinweis.
+
+### Monatsbudget
+
+Jede Ausgabe-Kategorie ist **fix** (Miete, Lebensmittel, Abos, Versicherungen), **variabel** (Shopping, Restaurant, Freizeit …) oder **Sparen** (z. B. ETF-Sparplan; Kategorien mit „Spar", „ETF", „Depot" im Namen automatisch). Umbuchungen können als Sparen zählen.
+
+`Frei verfügbar = regelmäßige Einnahmen − Fixkosten − Sparen`, berechnet aus den letzten bis zu 6 abgeschlossenen Monaten:
+
+- Regelmäßige Einnahmen: Absender in mindestens 2/3 der Monate, je Absender der Median (Weihnachtsgeld, Steuererstattung zählen nicht).
+- Fixkosten/Sparen: je Kategorie der Median der Monatssummen; was in den letzten 12 Monaten darüber lag (Jahresbeiträge), wird auf 12 Monate umgelegt.
+- Der Budget-Tab zeigt, wie viel davon im laufenden Monat schon für variable Ausgaben weg ist, und schlägt wiederkehrende Zahlungen in variablen Kategorien als Fixkosten vor.
 
 ### Kategorisierung
 

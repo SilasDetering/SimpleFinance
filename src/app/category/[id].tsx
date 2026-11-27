@@ -4,8 +4,10 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '@/domain/defaults';
 import { LEARNED_PRIORITY } from '@/domain/categorize';
-import type { CategoryType, Rule, RuleField } from '@/domain/types';
+import { budgetKindOf, budgetKindsFor } from '@/domain/budget';
+import type { BudgetKind, CategoryType, Rule, RuleField } from '@/domain/types';
 import { addRule, deleteCategory, deleteRule, recategorizeAll, saveCategory } from '@/db/repo';
+import { BudgetKindSegment } from '@/ui/BudgetKindSegment';
 import { Button, Icon } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
 import { font, radius, space, useTheme } from '@/ui/theme';
@@ -32,6 +34,10 @@ export default function CategoryEditor() {
   const [type, setType] = useState<CategoryType>(existing?.type ?? 'expense');
   const [color, setColor] = useState(existing?.color ?? CATEGORY_COLORS[0]);
   const [icon, setIcon] = useState(existing?.icon ?? CATEGORY_ICONS[0]);
+  // null = Standard (z. B. Lebensmittel fix, Shopping variabel)
+  const [budgetKind, setBudgetKind] = useState<BudgetKind | null>(existing?.budgetKind ?? null);
+  const draftCategory = { id: existing?.id ?? 'new', type, name, budgetKind };
+  const budgetKinds = budgetKindsFor(draftCategory);
   const initialRules = useMemo<DraftRule[]>(
     () => (existing ? rules.filter((r) => r.categoryId === existing.id).sort((a, b) => a.keyword.localeCompare(b.keyword)) : []),
     [existing, rules],
@@ -64,7 +70,7 @@ export default function CategoryEditor() {
     if (saving.current) return;
     saving.current = true;
     try {
-      const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type });
+      const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type, budgetKind });
       const keep = new Set(draftRules.filter((r) => r.id).map((r) => r.id));
       for (const r of initialRules) if (r.id && !keep.has(r.id)) await deleteRule(db, r.id);
       for (const r of draftRules) if (!r.id) await addRule(db, { categoryId, keyword: r.keyword, field: r.field, priority: r.priority });
@@ -148,6 +154,21 @@ export default function CategoryEditor() {
             <Text style={[font.small, { color: t.textMuted }]}>Umbuchungen werden in den Auswertungen ausgeblendet.</Text>
           ) : null}
         </Field>
+
+        {budgetKinds.length > 0 ? (
+          <Field label="Im Budget">
+            <BudgetKindSegment kinds={budgetKinds} value={budgetKindOf(draftCategory)} onChange={setBudgetKind} />
+            <Text style={[font.small, { color: t.textMuted }]}>
+              {budgetKindOf(draftCategory) === 'fixed'
+                ? 'Fällt jeden Monat an und wird vom Budget abgezogen.'
+                : budgetKindOf(draftCategory) === 'saving'
+                  ? 'Geht als Sparrate vom Budget ab.'
+                  : budgetKindOf(draftCategory) === 'variable'
+                    ? 'Sonderausgabe: wird aus dem freien Budget bezahlt.'
+                    : 'Spielt im Budget keine Rolle.'}
+            </Text>
+          </Field>
+        ) : null}
 
         <Field label="Farbe">
           <View style={styles.wrap}>

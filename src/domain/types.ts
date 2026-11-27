@@ -20,6 +20,15 @@ export interface Account {
  */
 export type CategoryType = 'expense' | 'income' | 'transfer';
 
+/**
+ * Rolle einer Kategorie in der Budgetplanung.
+ * fixed    = regelmäßige Fixkosten (Miete, Lebensmittel, Abos)
+ * variable = Sonderausgaben (Shopping, Restaurant), werden aus dem freien Budget bezahlt
+ * saving   = Sparen (z. B. ETF-Sparplan), mindert das Budget wie eine Fixkostenposition
+ * none     = spielt keine Rolle (Einnahmen, Bargeld, reine Umbuchungen)
+ */
+export type BudgetKind = 'fixed' | 'variable' | 'saving' | 'none';
+
 export interface Category {
   id: string;
   name: string;
@@ -29,6 +38,8 @@ export interface Category {
   /** Systemkategorien (Bargeld, Sonstiges) können nicht gelöscht werden. */
   isSystem: boolean;
   sortOrder: number;
+  /** Vom Nutzer gesetzte Budget-Rolle; null = Standard (siehe budgetKindOf) */
+  budgetKind?: BudgetKind | null;
 }
 
 /** Felder einer Buchung, gegen die eine Regel geprüft wird. */

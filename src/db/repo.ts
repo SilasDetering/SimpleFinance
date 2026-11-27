@@ -6,6 +6,7 @@ import { DEFAULT_CATEGORIES } from '@/domain/defaults';
 import type { IngCsvResult } from '@/domain/ingCsv';
 import {
   ACCOUNT_CASH,
+  type BudgetKind,
   type Category,
   type CategoryType,
   type ParsedTransaction,
@@ -84,6 +85,7 @@ interface CategoryRow {
   type: CategoryType;
   is_system: number;
   sort_order: number;
+  budget_kind: BudgetKind | null;
 }
 
 const mapCategory = (r: CategoryRow): Category => ({
@@ -94,6 +96,7 @@ const mapCategory = (r: CategoryRow): Category => ({
   type: r.type,
   isSystem: !!r.is_system,
   sortOrder: r.sort_order,
+  budgetKind: r.budget_kind ?? null,
 });
 
 interface RuleRow {
@@ -125,20 +128,26 @@ export async function saveCategory(
   db: SQLiteDatabase,
   c: Omit<Category, 'id' | 'isSystem' | 'sortOrder'> & { id?: string },
 ): Promise<string> {
+  const kind = c.budgetKind ?? null;
   if (c.id) {
     await db.runAsync(
-      'UPDATE categories SET name = ?, color = ?, icon = ?, type = CASE WHEN is_system = 1 THEN type ELSE ? END WHERE id = ?',
-      c.name, c.color, c.icon, c.type, c.id,
+      'UPDATE categories SET name = ?, color = ?, icon = ?, type = CASE WHEN is_system = 1 THEN type ELSE ? END, budget_kind = ? WHERE id = ?',
+      c.name, c.color, c.icon, c.type, kind, c.id,
     );
     return c.id;
   }
   const id = newId();
   const max = await db.getFirstAsync<{ m: number | null }>('SELECT MAX(sort_order) AS m FROM categories WHERE is_system = 0');
   await db.runAsync(
-    'INSERT INTO categories (id, name, color, icon, type, is_system, sort_order) VALUES (?, ?, ?, ?, ?, 0, ?)',
-    id, c.name, c.color, c.icon, c.type, (max?.m ?? 0) + 1,
+    'INSERT INTO categories (id, name, color, icon, type, is_system, sort_order, budget_kind) VALUES (?, ?, ?, ?, ?, 0, ?, ?)',
+    id, c.name, c.color, c.icon, c.type, (max?.m ?? 0) + 1, kind,
   );
   return id;
+}
+
+/** Setzt die Rolle einer Kategorie im Monatsbudget (fix, variabel, Sparen …). */
+export async function setCategoryBudgetKind(db: SQLiteDatabase, id: string, kind: BudgetKind | null): Promise<void> {
+  await db.runAsync('UPDATE categories SET budget_kind = ? WHERE id = ?', kind, id);
 }
 
 /** Löscht eine Kategorie. Systemkategorien (Bargeld, Sonstiges) sind geschützt. Buchungen werden neu kategorisiert. */
