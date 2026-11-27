@@ -213,3 +213,27 @@ export function categoryMonthlySeries(
   }
   return result;
 }
+
+/** Alle Einnahmen (Buchungen in Einnahme-Kategorien) im Zeitraum, ohne Umbuchungen. */
+export function incomeEntries<T extends LedgerEntry>(entries: T[], lookup: CategoryLookup, period: Period): T[] {
+  return entries.filter((e) => inPeriod(e, period) && categoryTypeOf(e, lookup) === 'income');
+}
+
+/**
+ * Monatsverlauf der Einnahmen: so viele Monate wie Daten vorhanden, höchstens `maxMonths`,
+ * bis einschließlich des letzten Monats mit Buchungen. Monate ohne Einnahmen zählen als 0.
+ */
+export function incomeMonthlySeries(entries: LedgerEntry[], lookup: CategoryLookup, maxMonths = 12): CategoryMonth[] {
+  const months = monthsWithData(entries);
+  if (months.length === 0) return [];
+  const first = months[0];
+  const last = months[months.length - 1];
+  const byMonth = groupByMonth(entries);
+  const result: CategoryMonth[] = [];
+  for (let i = maxMonths - 1; i >= 0; i--) {
+    const month = addMonths(last, -i);
+    if (month < first) continue;
+    result.push({ month, cents: incomeExpense(byMonth.get(month) ?? [], lookup).incomeCents });
+  }
+  return result;
+}

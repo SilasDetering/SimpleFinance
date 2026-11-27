@@ -79,6 +79,12 @@ export default function InsightsScreen() {
       params: { id: categoryId, month: period.kind === 'month' ? period.month : 'all' },
     });
 
+  const openIncome = () =>
+    router.push({
+      pathname: '/income-transactions',
+      params: { month: period.kind === 'month' ? period.month : 'all' },
+    });
+
   const inRange = useMemo(() => transactions.filter((tx) => inPeriod(tx, period)), [transactions, period]);
   const totals = useMemo(() => incomeExpense(inRange, lookup), [inRange, lookup]);
   const rate = savingsRate(totals.incomeCents, totals.expenseCents);
@@ -229,7 +235,7 @@ export default function InsightsScreen() {
         {/* Kennzahlen */}
         <Card>
           <View style={styles.kpis}>
-            <Kpi label="Einnahmen" value={formatCents(totals.incomeCents)} color={t.income} />
+            <Kpi label="Einnahmen" value={formatCents(totals.incomeCents)} color={t.income} onPress={openIncome} />
             <Kpi label="Ausgaben" value={formatCents(totals.expenseCents)} />
           </View>
           <Divider />
@@ -461,13 +467,27 @@ export default function InsightsScreen() {
 
 const formatAxisLabel = (l: string) => formatCentsShort(Number(l) * 100).replace(' €', '');
 
-function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
+function Kpi({ label, value, color, onPress }: { label: string; value: string; color?: string; onPress?: () => void }) {
   const t = useTheme();
-  return (
-    <View style={{ flex: 1, paddingBottom: space.md }}>
-      <Text style={[font.small, { color: t.textMuted }]}>{label}</Text>
+  const content = (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+        <Text style={[font.small, { color: t.textMuted }]}>{label}</Text>
+        {onPress ? <Icon name="chevron-forward" size={12} color={t.textFaint} /> : null}
+      </View>
       <Text style={[font.h2, { color: color ?? t.text, fontVariant: ['tabular-nums'] }]}>{value}</Text>
-    </View>
+    </>
+  );
+  if (!onPress) return <View style={{ flex: 1, paddingBottom: space.md }}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} anzeigen`}
+      style={({ pressed }) => ({ flex: 1, paddingBottom: space.md, opacity: pressed ? 0.6 : 1 })}
+    >
+      {content}
+    </Pressable>
   );
 }
 
