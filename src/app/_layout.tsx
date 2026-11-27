@@ -35,6 +35,7 @@ export default function RootLayout() {
             <Stack.Screen name="category/[id]" options={{ title: 'Kategorie' }} />
             <Stack.Screen name="category-transactions" options={{ title: 'Kategorie' }} />
             <Stack.Screen name="cash" options={{ title: 'Bargeld-Bestand' }} />
+            <Stack.Screen name="budget-categories" options={{ title: 'Kategorien einteilen' }} />
           </Stack>
         </ThemeProvider>
         </RulePromptProvider>

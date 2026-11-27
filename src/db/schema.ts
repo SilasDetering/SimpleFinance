@@ -103,6 +103,10 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
   async (db) => {
     await db.execAsync('ALTER TABLE transactions ADD COLUMN alias TEXT;');
   },
+  // v5: Rolle der Kategorie im Monatsbudget (fixed/variable/saving/none); NULL = Standard
+  async (db) => {
+    await db.execAsync('ALTER TABLE categories ADD COLUMN budget_kind TEXT;');
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {

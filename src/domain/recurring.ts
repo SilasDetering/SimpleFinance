@@ -27,14 +27,14 @@ export interface RecurringOptions {
   maxInactiveDays?: number;
 }
 
-function median(values: number[]): number {
+export function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 }
 
 /** Entfernt wechselnde Ziffernfolgen (Rechnungsnummern) aus dem Empfängernamen für die Gruppierung. */
-function groupKey(counterparty: string): string {
+export function groupKey(counterparty: string): string {
   return normalize(counterparty).replace(/\d{3,}/g, '').replace(/\s+/g, ' ').trim();
 }
 
