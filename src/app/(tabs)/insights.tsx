@@ -28,7 +28,9 @@ import { font, radius, space, useTheme } from '@/ui/theme';
 export default function InsightsScreen() {
   const t = useTheme();
   const { width } = useWindowDimensions();
-  const { transactions, categoryById, lookup, cashBalanceCents } = useData();
+  // Auswertungen rechnen mit `ledger` (offene Erstattungen und Rückzahlungen ausgeblendet),
+  // der Kontostand-Verlauf mit allen Buchungen
+  const { transactions: allTransactions, ledger: transactions, categoryById, lookup, cashBalanceCents } = useData();
   const months = useMemo(() => monthsWithData(transactions), [transactions]);
   const latest = months[months.length - 1];
   // Ohne explizite Auswahl wird automatisch der neueste Monat gezeigt
@@ -101,8 +103,8 @@ export default function InsightsScreen() {
   const top = useMemo(() => topCounterparties(inRange, lookup, 5), [inRange, lookup]);
   const recurring = useMemo(() => detectRecurring(transactions, lookup), [transactions, lookup]);
   const balance = useMemo(
-    () => balanceSeries(transactions.filter((tx) => tx.accountId === ACCOUNT_GIRO)),
-    [transactions],
+    () => balanceSeries(allTransactions.filter((tx) => tx.accountId === ACCOUNT_GIRO)),
+    [allTransactions],
   );
 
   const chartWidth = width - space.lg * 4 - 40;
@@ -185,7 +187,7 @@ export default function InsightsScreen() {
     );
   }, [balance, chartWidth, t]);
 
-  if (transactions.length === 0) {
+  if (allTransactions.length === 0) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
         <View style={{ padding: space.lg }}>
