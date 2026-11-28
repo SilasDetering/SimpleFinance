@@ -303,11 +303,23 @@ export async function addManualCash(db: SQLiteDatabase, input: ManualCashInput, 
   return newTxId;
 }
 
+/**
+ * Löscht eine einzelne Buchung. Bei importierten Buchungen wird der Duplikat-Schlüssel gemerkt,
+ * damit sie beim nächsten Import einer überlappenden CSV nicht wieder auftaucht.
+ */
 export async function deleteTransaction(db: SQLiteDatabase, id: string): Promise<void> {
   await inTransaction(db, async () => {
-    // Zuordnungen in beide Richtungen lösen, damit nichts ins Leere zeigt
+    const row = await db.getFirstAsync<{ dedup_key: string | null }>('SELECT dedup_key FROM transactions WHERE id = ?', id);
+    if (!row) return;
+    // Zugeordnete Rückzahlungen werden wieder normale Einnahmen, damit nichts ins Leere zeigt
     await db.runAsync('UPDATE transactions SET reimburses_id = NULL WHERE reimburses_id = ?', id);
-    await db.runAsync("DELETE FROM transactions WHERE id = ? AND source = 'manual'", id);
+    if (row.dedup_key) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO deleted_transactions (id, deleted_at) VALUES (?, ?)',
+        row.dedup_key, new Date().toISOString(),
+      );
+    }
+    await db.runAsync('DELETE FROM transactions WHERE id = ?', id);
   });
 }
 
@@ -389,8 +401,10 @@ export async function importParsedCsv(
   // Vorhandene Buchungen innerhalb der Transaktion lesen, damit ein zweiter Import
   // direkt danach die gerade eingefügten Buchungen als Duplikate erkennt
   await inTransaction(db, async () => {
+    // Gelöschte Buchungen zählen wie vorhandene, damit sie nicht zurückkommen
     const existing = await db.getAllAsync<{ dedup_key: string }>(
-      'SELECT dedup_key FROM transactions WHERE account_id = ? AND dedup_key IS NOT NULL',
+      `SELECT dedup_key FROM transactions WHERE account_id = ? AND dedup_key IS NOT NULL
+       UNION SELECT id FROM deleted_transactions`,
       accountId,
     );
     const split = splitDuplicates(accountId, parsed.transactions, new Set(existing.map((r) => r.dedup_key)));
@@ -470,6 +484,7 @@ export async function exportBackup(db: SQLiteDatabase): Promise<BackupFile> {
     imports: await db.getAllAsync<BackupRow>('SELECT * FROM imports'),
     transactions: await db.getAllAsync<BackupRow>('SELECT * FROM transactions'),
     prompt_exclusions: await db.getAllAsync<BackupRow>('SELECT * FROM prompt_exclusions'),
+    deleted_transactions: await db.getAllAsync<BackupRow>('SELECT * FROM deleted_transactions'),
   };
 }
 
@@ -486,7 +501,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
   }
   await inTransaction(db, async () => {
     await db.execAsync(
-      'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions;',
+      'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions;',
     );
     // Reihenfolge wegen Fremdschlüsseln: Konten, Kategorien, Regeln, Importe, Buchungen
     for (const table of BACKUP_TABLES) {
@@ -514,7 +529,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
 /** Löscht alle Buchungen, Importe, Regeln und eigenen Kategorien und stellt die Defaults wieder her. */
 export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
   await inTransaction(db, async () => {
-    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; UPDATE accounts SET iban = NULL;');
+    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions; UPDATE accounts SET iban = NULL;');
     await seedDefaultCategories(db);
   });
 }

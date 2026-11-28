@@ -3,9 +3,9 @@
  * (Spaltennamen wie in SQLite), damit ein Backup ohne Umrechnung zurückgespielt werden kann.
  */
 
-export const BACKUP_TABLES = ['accounts', 'categories', 'rules', 'imports', 'transactions', 'prompt_exclusions'] as const;
+export const BACKUP_TABLES = ['accounts', 'categories', 'rules', 'imports', 'transactions', 'prompt_exclusions', 'deleted_transactions'] as const;
 /** Tabellen, die in älteren Backups noch fehlen dürfen (werden dann als leer behandelt). */
-const OPTIONAL_TABLES: readonly string[] = ['prompt_exclusions'];
+const OPTIONAL_TABLES: readonly string[] = ['prompt_exclusions', 'deleted_transactions'];
 export type BackupTable = (typeof BACKUP_TABLES)[number];
 export type BackupRow = Record<string, unknown>;
 
@@ -19,6 +19,8 @@ export interface BackupFile {
   imports: BackupRow[];
   transactions: BackupRow[];
   prompt_exclusions: BackupRow[];
+  /** Duplikat-Schlüssel gelöschter Import-Buchungen */
+  deleted_transactions: BackupRow[];
 }
 
 export const BACKUP_VERSION = 1;

@@ -1,11 +1,11 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatDate } from '@/domain/dates';
 import { formatCents } from '@/domain/money';
 import { ACCOUNT_CASH, CATEGORY_CASH } from '@/domain/types';
-import { deleteTransaction, setTransactionAlias, setTransactionNote } from '@/db/repo';
+import { setTransactionAlias, setTransactionNote } from '@/db/repo';
 import { CategoryPicker } from '@/ui/CategoryPicker';
 import { ReimburseSection } from '@/ui/ReimburseSection';
 import { Button, CategoryBadge, Divider, Icon } from '@/ui/components';
@@ -13,6 +13,7 @@ import { useData } from '@/ui/DataProvider';
 import { displayTitle } from '@/ui/TransactionRow';
 import { font, radius, space, useTheme } from '@/ui/theme';
 import { useCategoryChange } from '@/ui/useCategoryChange';
+import { useDeleteTransaction } from '@/ui/useDeleteTransaction';
 
 export default function TransactionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -20,6 +21,7 @@ export default function TransactionDetail() {
   const db = useSQLiteContext();
   const { transactions, categories, categoryById, reload } = useData();
   const changeCategory = useCategoryChange();
+  const confirmDelete = useDeleteTransaction();
   const tx = useMemo(() => transactions.find((x) => x.id === id), [transactions, id]);
   const [note, setNote] = useState(tx?.note ?? '');
   const [alias, setAlias] = useState(tx?.alias ?? '');
@@ -52,20 +54,8 @@ export default function TransactionDetail() {
     await reload();
   };
 
-  const remove = () =>
-    Alert.alert('Buchung löschen?', 'Die manuelle Bargeld-Buchung wird entfernt.', [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Löschen',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteTransaction(db, tx.id);
-          // Erst zurück, dann neu laden: sonst blitzt kurz „Buchung nicht gefunden" auf
-          router.back();
-          await reload();
-        },
-      },
-    ]);
+  // Erst zurück, dann neu laden: sonst blitzt kurz „Buchung nicht gefunden" auf
+  const remove = () => confirmDelete(tx, { onDeleted: () => router.back() });
 
   const rows: [string, string][] = [
     ['Datum', formatDate(tx.bookingDate)],
@@ -181,7 +171,7 @@ export default function TransactionDetail() {
           />
         </View>
 
-        {isCash ? <Button title="Buchung löschen" variant="secondary" icon="trash-outline" onPress={remove} /> : null}
+        <Button title="Buchung löschen" variant="secondary" icon="trash-outline" onPress={remove} />
       </ScrollView>
 
       <CategoryPicker

@@ -27,6 +27,7 @@ import { pickAndImportCsv } from '@/ui/importCsv';
 import { TransactionRow } from '@/ui/TransactionRow';
 import { font, radius, space, useTheme } from '@/ui/theme';
 import { useCategoryChange } from '@/ui/useCategoryChange';
+import { useDeleteTransaction } from '@/ui/useDeleteTransaction';
 
 interface Section {
   key: string;
@@ -44,6 +45,7 @@ export default function HistoryScreen() {
   const db = useSQLiteContext();
   const { loading, transactions, ledger, openReimbursements, categories, categoryById, lookup, bankBalance, reload } = useData();
   const changeCategory = useCategoryChange();
+  const confirmDelete = useDeleteTransaction();
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
   const [filterOpen, setFilterOpen] = useState(false);
   const [pickerTx, setPickerTx] = useState<Transaction | null>(null);
@@ -92,6 +94,10 @@ export default function HistoryScreen() {
     (tx: Transaction) => router.push({ pathname: '/transaction/[id]', params: { id: tx.id } }),
     [],
   );
+  const deleteRow = useCallback(
+    (tx: Transaction, close: () => void) => confirmDelete(tx, { onCancel: close }),
+    [confirmDelete],
+  );
   const renderItem = useCallback(
     ({ item }: { item: Transaction }) => (
       <TransactionRow
@@ -99,9 +105,10 @@ export default function HistoryScreen() {
         category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
         onPress={openTransaction}
         onPressCategory={setPickerTx}
+        onDelete={deleteRow}
       />
     ),
-    [categoryById, openTransaction],
+    [categoryById, openTransaction, deleteRow],
   );
 
   const filterSummary = [
