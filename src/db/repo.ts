@@ -10,6 +10,7 @@ import {
   type Category,
   type CategoryType,
   type ParsedTransaction,
+  type ReimburseState,
   type Rule,
   type RuleField,
   type Transaction,
@@ -55,6 +56,9 @@ interface TxRow {
   import_id: string | null;
   dedup_key: string | null;
   day_order: number;
+  reimburse_state: ReimburseState | null;
+  reimburse_from: string | null;
+  reimburses_id: string | null;
 }
 
 const mapTx = (r: TxRow): Transaction => ({
@@ -75,6 +79,9 @@ const mapTx = (r: TxRow): Transaction => ({
   importId: r.import_id,
   dedupKey: r.dedup_key,
   dayOrder: r.day_order,
+  reimburseState: r.reimburse_state ?? null,
+  reimburseFrom: r.reimburse_from ?? null,
+  reimbursesId: r.reimburses_id ?? null,
 });
 
 interface CategoryRow {
@@ -318,7 +325,56 @@ export async function addManualCash(db: SQLiteDatabase, input: ManualCashInput, 
 }
 
 export async function deleteTransaction(db: SQLiteDatabase, id: string): Promise<void> {
-  await db.runAsync("DELETE FROM transactions WHERE id = ? AND source = 'manual'", id);
+  await inTransaction(db, async () => {
+    // Zuordnungen in beide Richtungen lösen, damit nichts ins Leere zeigt
+    await db.runAsync('UPDATE transactions SET reimburses_id = NULL WHERE reimburses_id = ?', id);
+    await db.runAsync("DELETE FROM transactions WHERE id = ? AND source = 'manual'", id);
+  });
+}
+
+/* ---------- Erstattungen ---------- */
+
+/**
+ * Markiert eine Ausgabe als erstattbar (open) bzw. nimmt die Markierung zurück (null).
+ * Beim Zurücknehmen werden zugeordnete Geldeingänge wieder normale Einnahmen.
+ */
+export async function setReimbursable(db: SQLiteDatabase, id: string, reimbursable: boolean, from?: string): Promise<void> {
+  await inTransaction(db, async () => {
+    if (reimbursable) {
+      await db.runAsync(
+        "UPDATE transactions SET reimburse_state = 'open', reimburse_from = ?, reimburses_id = NULL WHERE id = ? AND amount_cents < 0",
+        from?.trim() || null, id,
+      );
+    } else {
+      await db.runAsync('UPDATE transactions SET reimburse_state = NULL, reimburse_from = NULL WHERE id = ?', id);
+      await db.runAsync('UPDATE transactions SET reimburses_id = NULL WHERE reimburses_id = ?', id);
+    }
+  });
+}
+
+/** Wer erstattet (nur Anzeige). */
+export async function setReimburseFrom(db: SQLiteDatabase, id: string, from: string): Promise<void> {
+  await db.runAsync('UPDATE transactions SET reimburse_from = ? WHERE id = ?', from.trim() || null, id);
+}
+
+/** Erstattung abschließen (done: Rest zählt als Ausgabe) oder wieder öffnen (open). */
+export async function setReimburseState(db: SQLiteDatabase, id: string, state: ReimburseState): Promise<void> {
+  await db.runAsync('UPDATE transactions SET reimburse_state = ? WHERE id = ? AND reimburse_state IS NOT NULL', state, id);
+}
+
+/** Ordnet einen Geldeingang einer erstattbaren Ausgabe zu (expenseId null löst die Zuordnung). */
+export async function linkRepayment(db: SQLiteDatabase, paymentId: string, expenseId: string | null): Promise<void> {
+  if (expenseId) {
+    const expense = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM transactions WHERE id = ? AND reimburse_state IS NOT NULL AND amount_cents < 0',
+      expenseId,
+    );
+    if (!expense) throw new Error('Diese Ausgabe ist nicht als erstattbar markiert.');
+  }
+  await db.runAsync(
+    'UPDATE transactions SET reimburses_id = ? WHERE id = ? AND amount_cents > 0 AND reimburse_state IS NULL',
+    expenseId, paymentId,
+  );
 }
 
 /* ---------- Import ---------- */

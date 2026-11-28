@@ -84,7 +84,19 @@ export interface Transaction {
   dedupKey: string | null;
   /** Reihenfolge innerhalb eines Tages (aufsteigend = chronologisch) */
   dayOrder: number;
+  /**
+   * Ausgabe, die mir jemand zurückzahlt (Bahnticket für die Arbeit, für einen Freund vorgestreckt).
+   * open = wartet auf Erstattung, zählt nicht in Budget und Auswertung.
+   * done = abgeschlossen; was nicht erstattet wurde, zählt als echte Ausgabe.
+   */
+  reimburseState?: ReimburseState | null;
+  /** Wer die Ausgabe erstattet (z. B. „Arbeit", „Max"), nur zur Anzeige */
+  reimburseFrom?: string | null;
+  /** Bei einem Geldeingang: die Ausgabe, die damit erstattet wird. Zählt dann nicht als Einnahme. */
+  reimbursesId?: string | null;
 }
+
+export type ReimburseState = 'open' | 'done';
 
 /** Eine aus der CSV gelesene, noch nicht gespeicherte Buchung. */
 export interface ParsedTransaction {

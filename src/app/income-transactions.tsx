@@ -17,7 +17,7 @@ import { useCategoryChange } from '@/ui/useCategoryChange';
 export default function IncomeTransactionsScreen() {
   const { month } = useLocalSearchParams<{ month?: string }>();
   const t = useTheme();
-  const { transactions, categories, categoryById, lookup } = useData();
+  const { ledger: transactions, categories, categoryById, lookup } = useData();
   const changeCategory = useCategoryChange();
   const [pickerTx, setPickerTx] = useState<Transaction | null>(null);
 

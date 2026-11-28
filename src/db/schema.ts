@@ -107,7 +107,16 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
   async (db) => {
     await db.execAsync('ALTER TABLE categories ADD COLUMN budget_kind TEXT;');
   },
-  // v6: optionaler Planwert pro Kategorie (Cent, NULL = berechnen) und Einstellungen (z. B. Budget-Neustart)
+  // v6: Erstattungen. Ausgabe als erstattbar markieren (open/done), Geldeingang einer Ausgabe zuordnen
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE transactions ADD COLUMN reimburse_state TEXT;
+      ALTER TABLE transactions ADD COLUMN reimburse_from TEXT;
+      ALTER TABLE transactions ADD COLUMN reimburses_id TEXT;
+      CREATE INDEX idx_tx_reimburses ON transactions(reimburses_id);
+    `);
+  },
+  // v7: optionaler Planwert pro Kategorie (Cent, NULL = berechnen) und Einstellungen (z. B. Budget-Neustart)
   async (db) => {
     await db.execAsync(`
       ALTER TABLE categories ADD COLUMN planned_cents INTEGER;

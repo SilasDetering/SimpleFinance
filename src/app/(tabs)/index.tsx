@@ -42,7 +42,7 @@ interface Section {
 export default function HistoryScreen() {
   const t = useTheme();
   const db = useSQLiteContext();
-  const { loading, transactions, categories, categoryById, lookup, bankBalance, reload } = useData();
+  const { loading, transactions, ledger, openReimbursements, categories, categoryById, lookup, bankBalance, reload } = useData();
   const changeCategory = useCategoryChange();
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -67,9 +67,10 @@ export default function HistoryScreen() {
   // Monats-Saldo immer über alle Buchungen des Monats; hängt nicht vom Filter ab
   const monthSaldo = useMemo(() => {
     const m = new Map<string, number>();
-    for (const [key, txs] of groupByMonth(transactions)) m.set(key, incomeExpense(txs, lookup).saldoCents);
+    // ohne offene Erstattungen und Rückzahlungen, wie in den Auswertungen
+    for (const [key, txs] of groupByMonth(ledger)) m.set(key, incomeExpense(txs, lookup).saldoCents);
     return m;
-  }, [transactions, lookup]);
+  }, [ledger, lookup]);
 
   // Die Liste ist neueste zuerst sortiert, die Gruppierung behält die Reihenfolge bei
   const sections = useMemo<Section[]>(
@@ -210,6 +211,14 @@ export default function HistoryScreen() {
             >
               <Icon name="help-circle-outline" size={14} color={t.textMuted} />
               <Text style={[font.smallStrong, { color: t.textMuted }]}>{uncategorizedCount} ohne Kategorie</Text>
+            </Pressable>
+          ) : null}
+          {!filtering && openReimbursements.length > 0 ? (
+            <Pressable onPress={() => router.push('/reimbursements')} style={[styles.filter, { borderColor: t.border }]}>
+              <Icon name="return-down-back-outline" size={14} color={t.textMuted} />
+              <Text style={[font.smallStrong, { color: t.textMuted }]}>
+                {openReimbursements.length} {openReimbursements.length === 1 ? 'Erstattung' : 'Erstattungen'} offen
+              </Text>
             </Pressable>
           ) : null}
         </View>

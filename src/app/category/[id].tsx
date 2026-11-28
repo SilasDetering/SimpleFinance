@@ -29,7 +29,7 @@ export default function CategoryEditor() {
   const isNew = id === 'new';
   const t = useTheme();
   const db = useSQLiteContext();
-  const { categoryById, categories, lookup, budgetStartMonth, rules, transactions, reload } = useData();
+  const { categoryById, categories, lookup, budgetStartMonth, rules, transactions, ledger, reload } = useData();
   const existing = isNew ? undefined : categoryById.get(id);
 
   const [name, setName] = useState(existing?.name ?? '');
@@ -50,9 +50,9 @@ export default function CategoryEditor() {
   const computedCents = useMemo(() => {
     if (!existing || !canPlan) return null;
     const cats = categories.map((c) => (c.id === existing.id ? { ...c, budgetKind: draftKind, plannedCents: null } : c));
-    const b = computeBudget(transactions, cats, lookup, todayIso(), { startMonth: budgetStartMonth });
+    const b = computeBudget(ledger, cats, lookup, todayIso(), { startMonth: budgetStartMonth });
     return [...b.fixed, ...b.saving].find((c) => c.categoryId === existing.id)?.totalCents ?? 0;
-  }, [existing, canPlan, categories, draftKind, transactions, lookup, budgetStartMonth]);
+  }, [existing, canPlan, categories, draftKind, ledger, lookup, budgetStartMonth]);
   const initialRules = useMemo<DraftRule[]>(
     () => (existing ? rules.filter((r) => r.categoryId === existing.id).sort((a, b) => a.keyword.localeCompare(b.keyword)) : []),
     [existing, rules],
