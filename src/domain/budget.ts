@@ -16,6 +16,9 @@ import { CATEGORY_CASH, CATEGORY_OTHER, CATEGORY_TRANSFER, type BudgetKind, type
  *    das Budget nicht aufbläht. Einmalige Einnahmen fließen gar nicht ein.
  *  - Fixkosten und Sparen: je Kategorie der Median der Monatssummen. Was in den letzten 12 Monaten
  *    darüber lag (Jahresbeitrag Versicherung, KFZ-Steuer, Nebenkosten-Nachzahlung), wird auf 12 Monate umgelegt.
+ *  - Optional: Planwert je Kategorie. Ist einer gesetzt, ersetzt er den berechneten Betrag (z. B. 80 € Lebensmittel
+ *    im Semester, obwohl die letzten Monate im Ausland kaum etwas angefallen ist).
+ *  - Optional: Neustart ab Monat. Buchungen davor zählen nicht mehr, etwa nach einem Umzug oder Jobwechsel.
  */
 
 type Entry = LedgerEntry & { counterparty: string; alias?: string | null };
@@ -75,9 +78,13 @@ export interface PlannedCategory {
   /** größere Einmalbeträge der letzten 12 Monate, auf den Monat umgelegt */
   spreadCents: number;
   totalCents: number;
+  /** true = fester Planwert statt berechnetem Betrag */
+  planned: boolean;
 }
 
 export interface Budget {
+  /** Neustart-Monat (YYYY-MM), ab dem gerechnet wird; null = alle Daten */
+  startMonth: string | null;
   /** Monate, aus denen das Budget berechnet ist (aufsteigend) */
   months: string[];
   incomeSources: IncomeSource[];
@@ -114,7 +121,20 @@ function monthRange(from: string, to: string): string[] {
   return result;
 }
 
-export function computeBudget(entries: Entry[], categories: Category[], lookup: CategoryLookup, today: string): Budget {
+export interface BudgetOptions {
+  /** Neustart ab diesem Monat (YYYY-MM): ältere Buchungen fließen nicht ein */
+  startMonth?: string | null;
+}
+
+export function computeBudget(
+  allEntries: Entry[],
+  categories: Category[],
+  lookup: CategoryLookup,
+  today: string,
+  options: BudgetOptions = {},
+): Budget {
+  const startMonth = options.startMonth || null;
+  const entries = startMonth ? allEntries.filter((e) => monthKey(e.bookingDate) >= startMonth) : allEntries;
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const kindOfCategory = (id: string): BudgetKind => (id === CATEGORY_CASH ? 'none' : budgetKindOf(categoryById.get(id)));
   const kindOf = (e: LedgerEntry): BudgetKind => kindOfCategory(effectiveCategoryId(e));
@@ -128,11 +148,16 @@ export function computeBudget(entries: Entry[], categories: Category[], lookup: 
   const first = dataMonths[0];
 
   const empty: Budget = {
+    startMonth,
     months: [], incomeSources: [], incomeCents: 0, irregularIncomeCents: 0, fixed: [], fixedCents: 0, saving: [],
     savingCents: 0, freeCents: 0, savingsRate: null, variableTypicalCents: 0, currentMonth, variableSpentCents: 0,
     daysLeft: null, suggestions: [],
   };
-  if (!last) return empty;
+  if (!last) {
+    // Keine Buchungen (seit dem Neustart): nur die Planwerte zählen
+    const planned = plan(categories, kindOfCategory, new Map());
+    return { ...empty, ...planned, freeCents: 0 - planned.fixedCents - planned.savingCents || 0 };
+  }
 
   // Die letzten n Monate bis `last`, aber nicht vor dem ersten Monat mit Daten
   const lastMonths = (n: number) => {
@@ -192,28 +217,20 @@ export function computeBudget(entries: Entry[], categories: Category[], lookup: 
     outByCat.set(id, byMonth);
   }
 
-  const fixed: PlannedCategory[] = [];
-  const saving: PlannedCategory[] = [];
-  for (const [categoryId, byMonth] of outByCat) {
+  const baseOf = (byMonth: Map<string, number>): Omit<PlannedCategory, 'categoryId'> => {
     const baseCents = Math.max(0, median(window.map((m) => byMonth.get(m) ?? 0)));
-    const excess = spreadWindow.reduce((s, m) => s + Math.max(0, (byMonth.get(m) ?? 0) - baseCents), 0);
+    const excess = spreadWindow.reduce((sum, m) => sum + Math.max(0, (byMonth.get(m) ?? 0) - baseCents), 0);
     const spreadCents = Math.round(excess / SPREAD_MONTHS);
-    const totalCents = baseCents + spreadCents;
-    if (totalCents <= 0) continue;
-    const item = { categoryId, baseCents, spreadCents, totalCents };
-    if (kindOfCategory(categoryId) === 'saving') saving.push(item);
-    else fixed.push(item);
-  }
-  fixed.sort((a, b) => b.totalCents - a.totalCents);
-  saving.sort((a, b) => b.totalCents - a.totalCents);
-  const fixedCents = fixed.reduce((s, c) => s + c.totalCents, 0);
-  const savingCents = saving.reduce((s, c) => s + c.totalCents, 0);
+    return { baseCents, spreadCents, totalCents: baseCents + spreadCents, planned: false };
+  };
+  const { fixed, fixedCents, saving, savingCents } = plan(categories, kindOfCategory, outByCat, baseOf);
 
   const suggestions = detectRecurring(entries, lookup).filter(
     (r) => r.categoryId && r.categoryId !== CATEGORY_OTHER && kindOfCategory(r.categoryId) === 'variable',
   );
 
   return {
+    startMonth,
     months: window,
     incomeSources,
     incomeCents,
@@ -229,5 +246,40 @@ export function computeBudget(entries: Entry[], categories: Category[], lookup: 
     variableSpentCents,
     daysLeft: currentMonth === thisMonth ? daysInMonth(thisMonth) - Number(today.slice(8, 10)) + 1 : null,
     suggestions,
+  };
+}
+
+/** Fixkosten und Sparen je Kategorie: Planwert, falls gesetzt, sonst berechnet. */
+function plan(
+  categories: Category[],
+  kindOfCategory: (id: string) => BudgetKind,
+  outByCat: Map<string, Map<string, number>>,
+  baseOf?: (byMonth: Map<string, number>) => Omit<PlannedCategory, 'categoryId'>,
+): Pick<Budget, 'fixed' | 'fixedCents' | 'saving' | 'savingCents'> {
+  const plannedById = new Map<string, number>();
+  for (const c of categories) {
+    if (c.plannedCents != null && c.plannedCents >= 0) plannedById.set(c.id, c.plannedCents);
+  }
+  const ids = new Set([...outByCat.keys(), ...plannedById.keys()]);
+  const fixed: PlannedCategory[] = [];
+  const saving: PlannedCategory[] = [];
+  for (const categoryId of ids) {
+    const kind = kindOfCategory(categoryId);
+    if (kind !== 'fixed' && kind !== 'saving') continue;
+    const plannedCents = plannedById.get(categoryId);
+    const item: PlannedCategory =
+      plannedCents !== undefined
+        ? { categoryId, baseCents: plannedCents, spreadCents: 0, totalCents: plannedCents, planned: true }
+        : { categoryId, ...(baseOf ? baseOf(outByCat.get(categoryId)!) : { baseCents: 0, spreadCents: 0, totalCents: 0, planned: false }) };
+    if (item.totalCents <= 0) continue;
+    (kind === 'saving' ? saving : fixed).push(item);
+  }
+  fixed.sort((a, b) => b.totalCents - a.totalCents);
+  saving.sort((a, b) => b.totalCents - a.totalCents);
+  return {
+    fixed,
+    fixedCents: fixed.reduce((sum, c) => sum + c.totalCents, 0),
+    saving,
+    savingCents: saving.reduce((sum, c) => sum + c.totalCents, 0),
   };
 }

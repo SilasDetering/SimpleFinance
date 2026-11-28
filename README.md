@@ -71,6 +71,8 @@ Jede Ausgabe-Kategorie ist **fix** (Miete, Lebensmittel, Abos, Versicherungen), 
 
 - Regelmäßige Einnahmen: Absender in mindestens 2/3 der Monate, je Absender der Median (Weihnachtsgeld, Steuererstattung zählen nicht).
 - Fixkosten/Sparen: je Kategorie der Median der Monatssummen; was in den letzten 12 Monaten darüber lag (Jahresbeiträge), wird auf 12 Monate umgelegt.
+- Optionaler **Planwert** je Fix-/Spar-Kategorie (im Kategorie-Editor): ersetzt den berechneten Betrag, z. B. 80 € Lebensmittel im Semester. Leer = automatisch.
+- Optionaler **Neustart ab Monat** (Budget-Tab): ältere Buchungen zählen nicht mehr, etwa nach Umzug, Jobwechsel oder Auslandsaufenthalt. Aus = alle Monate.
 - Der Budget-Tab zeigt, wie viel davon im laufenden Monat schon für variable Ausgaben weg ist, und schlägt wiederkehrende Zahlungen in variablen Kategorien als Fixkosten vor.
 
 ### Kategorisierung
