@@ -21,6 +21,7 @@ import {
   deletePromptExclusion,
   getPromptExclusions,
   deleteAllData,
+  deleteTransaction,
   exportBackup,
   getRules,
   restoreBackup,
@@ -39,7 +40,6 @@ import {
   linkRepayment,
   setReimbursable,
   setReimburseState,
-  deleteTransaction,
 } from '../repo';
 import { migrate } from '../schema';
 
@@ -264,6 +264,33 @@ describe('Repository', () => {
       'Netflix International B.V.',
       'Spotify AB',
     ]);
+  });
+
+  it('einzelne Buchungen löschen; gelöschte Import-Buchungen kommen beim Re-Import nicht zurück', async () => {
+    const parsed = sample('ing-beispiel-aug-okt.csv');
+    await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed);
+    const cashId = await addManualCash(db, { kind: 'expense', amountCents: 500, bookingDate: '2026-10-30', categoryId: 'groceries', description: 'Bäcker' });
+    const imported = (await getTransactions(db)).find((t) => t.source === 'csv')!;
+    await deleteTransaction(db, imported.id);
+    await deleteTransaction(db, cashId);
+    let txs = await getTransactions(db);
+    expect(txs).toHaveLength(60);
+    expect(txs.some((t) => t.id === imported.id || t.id === cashId)).toBe(false);
+
+    const again = await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed);
+    expect(again.newCount).toBe(0);
+    expect(await getTransactions(db)).toHaveLength(60);
+
+    // Bleibt über Backup erhalten, „Alles löschen" vergisst es
+    const backup = await exportBackup(db);
+    expect(backup.deleted_transactions).toHaveLength(1);
+    await deleteAllData(db);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    expect((await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed)).newCount).toBe(0);
+    await deleteAllData(db);
+    expect((await importParsedCsv(db, ACCOUNT_GIRO, 'a.csv', parsed)).newCount).toBe(61);
+    txs = await getTransactions(db);
+    expect(txs).toHaveLength(61);
   });
 
   it('alles löschen stellt Defaults wieder her', async () => {

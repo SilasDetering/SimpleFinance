@@ -116,7 +116,16 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
       CREATE INDEX idx_tx_reimburses ON transactions(reimburses_id);
     `);
   },
-  // v7: optionaler Planwert pro Kategorie (Cent, NULL = berechnen) und Einstellungen (z. B. Budget-Neustart)
+  // v7: gelöschte Import-Buchungen (id = dedup_key), damit ein erneuter Import sie nicht wieder anlegt
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE deleted_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        deleted_at TEXT NOT NULL
+      );
+    `);
+  },
+  // v8: optionaler Planwert pro Kategorie (Cent, NULL = berechnen) und Einstellungen (z. B. Budget-Neustart)
   async (db) => {
     await db.execAsync(`
       ALTER TABLE categories ADD COLUMN planned_cents INTEGER;
