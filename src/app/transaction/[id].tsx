@@ -7,6 +7,7 @@ import { formatCents } from '@/domain/money';
 import { ACCOUNT_CASH, CATEGORY_CASH } from '@/domain/types';
 import { setTransactionAlias, setTransactionNote } from '@/db/repo';
 import { CategoryPicker } from '@/ui/CategoryPicker';
+import { ReimburseSection } from '@/ui/ReimburseSection';
 import { Button, CategoryBadge, Divider, Icon } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
 import { displayTitle } from '@/ui/TransactionRow';
@@ -133,6 +134,8 @@ export default function TransactionDetail() {
             </View>
           ))}
         </View>
+
+        <ReimburseSection tx={tx} />
 
         {!isCash ? (
           <View style={{ gap: space.sm }}>

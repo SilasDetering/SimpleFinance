@@ -18,7 +18,7 @@ import { useDeleteTransaction } from '@/ui/useDeleteTransaction';
 export default function IncomeTransactionsScreen() {
   const { month } = useLocalSearchParams<{ month?: string }>();
   const t = useTheme();
-  const { transactions, categories, categoryById, lookup } = useData();
+  const { ledger: transactions, categories, categoryById, lookup } = useData();
   const changeCategory = useCategoryChange();
   const confirmDelete = useDeleteTransaction();
   const [pickerTx, setPickerTx] = useState<Transaction | null>(null);

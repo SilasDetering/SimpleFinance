@@ -35,6 +35,9 @@ export const TransactionRow = memo(function TransactionRow({
   const isCash = tx.accountId === ACCOUNT_CASH;
   // Umbuchungen und Bargeld-Bewegungen zählen nicht als Ein-/Ausgabe -> dezent darstellen
   const isTransfer = tx.categoryId === CATEGORY_CASH || category?.type === 'transfer';
+  // Offene Erstattungen und Rückzahlungen zählen ebenfalls nicht -> dezent, mit Hinweis
+  const reimburseTag = tx.reimbursesId ? 'Rückzahlung' : tx.reimburseState === 'open' ? 'Erstattbar' : null;
+  const muted = isTransfer || !!reimburseTag;
   const row = (
     <Pressable onPress={() => onPress(tx)} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}>
       <CategoryBadge category={category} />
@@ -49,12 +52,17 @@ export const TransactionRow = memo(function TransactionRow({
               <Text style={[font.caption, { color: t.textMuted }]}>Bar</Text>
             </View>
           ) : null}
+          {reimburseTag ? (
+            <View style={[styles.tag, { borderColor: t.border }]}>
+              <Text style={[font.caption, { color: t.textMuted }]}>{reimburseTag}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
       <View style={styles.right}>
         <Amount
           cents={tx.amountCents}
-          style={isTransfer ? { color: t.textMuted, fontWeight: '500' } : undefined}
+          style={muted ? { color: t.textMuted, fontWeight: '500' } : undefined}
         />
         <Text style={[font.small, { color: t.textFaint }]}>{formatDayShort(tx.bookingDate)}</Text>
       </View>

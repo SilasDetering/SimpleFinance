@@ -107,7 +107,16 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
   async (db) => {
     await db.execAsync('ALTER TABLE categories ADD COLUMN budget_kind TEXT;');
   },
-  // v6: gelöschte Import-Buchungen (id = dedup_key), damit ein erneuter Import sie nicht wieder anlegt
+  // v6: Erstattungen. Ausgabe als erstattbar markieren (open/done), Geldeingang einer Ausgabe zuordnen
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE transactions ADD COLUMN reimburse_state TEXT;
+      ALTER TABLE transactions ADD COLUMN reimburse_from TEXT;
+      ALTER TABLE transactions ADD COLUMN reimburses_id TEXT;
+      CREATE INDEX idx_tx_reimburses ON transactions(reimburses_id);
+    `);
+  },
+  // v7: gelöschte Import-Buchungen (id = dedup_key), damit ein erneuter Import sie nicht wieder anlegt
   async (db) => {
     await db.execAsync(`
       CREATE TABLE deleted_transactions (

@@ -35,6 +35,9 @@ import {
   saveCategory,
   setCategoryBudgetKind,
   setTransactionCategory,
+  linkRepayment,
+  setReimbursable,
+  setReimburseState,
 } from '../repo';
 import { migrate } from '../schema';
 
@@ -94,6 +97,39 @@ describe('Repository', () => {
     const cats = await getCategories(db);
     expect(cats.find((c) => c.id === 'groceries')?.budgetKind).toBe('variable');
     expect(cats.find((c) => c.id === id)?.budgetKind).toBe('saving');
+  });
+
+  it('Erstattungen: markieren, zuordnen, abschließen, aufheben, Backup', async () => {
+    const ticketId = await addManualCash(db, { kind: 'expense', amountCents: 5000, bookingDate: '2026-10-05', categoryId: 'mobility', description: 'Bahn' });
+    const payId = await addManualCash(db, { kind: 'income', amountCents: 3000, bookingDate: '2026-10-20', categoryId: 'income', description: 'Max' });
+    // Nur erstattbare Ausgaben lassen sich zuordnen
+    await expect(linkRepayment(db, payId, ticketId)).rejects.toThrow();
+    await setReimbursable(db, ticketId, true, ' Max ');
+    await setReimbursable(db, payId, true); // Eingang kann nicht erstattbar sein
+    await linkRepayment(db, payId, ticketId);
+    let txs = await getTransactions(db);
+    expect(txs.find((t) => t.id === ticketId)).toMatchObject({ reimburseState: 'open', reimburseFrom: 'Max' });
+    expect(txs.find((t) => t.id === payId)).toMatchObject({ reimburseState: null, reimbursesId: ticketId });
+
+    await setReimburseState(db, ticketId, 'done');
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    txs = await getTransactions(db);
+    expect(txs.find((t) => t.id === ticketId)?.reimburseState).toBe('done');
+    expect(txs.find((t) => t.id === payId)?.reimbursesId).toBe(ticketId);
+
+    // Aufheben löst auch die Zuordnung der Rückzahlung
+    await setReimbursable(db, ticketId, false);
+    txs = await getTransactions(db);
+    expect(txs.find((t) => t.id === ticketId)).toMatchObject({ reimburseState: null, reimburseFrom: null });
+    expect(txs.find((t) => t.id === payId)?.reimbursesId).toBeNull();
+
+    // Löschen einer Ausgabe löst Zuordnungen
+    await setReimbursable(db, ticketId, true);
+    await linkRepayment(db, payId, ticketId);
+    await deleteTransaction(db, ticketId);
+    expect((await getTransactions(db)).find((t) => t.id === payId)?.reimbursesId).toBeNull();
   });
 
   it('importiert, kategorisiert und überspringt Duplikate bei Überlappung', async () => {
