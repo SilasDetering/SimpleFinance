@@ -73,6 +73,15 @@ Jede Ausgabe-Kategorie ist **fix** (Miete, Lebensmittel, Abos, Versicherungen), 
 - Fixkosten/Sparen: je Kategorie der Median der Monatssummen; was in den letzten 12 Monaten darüber lag (Jahresbeiträge), wird auf 12 Monate umgelegt.
 - Der Budget-Tab zeigt, wie viel davon im laufenden Monat schon für variable Ausgaben weg ist, und schlägt wiederkehrende Zahlungen in variablen Kategorien als Fixkosten vor.
 
+### Erstattungen
+
+Für Geld, das man auslegt und zurückbekommt (Bahnticket für die Arbeit, für einen Freund bezahlt):
+
+- In der Buchung „Bekomme ich zurück" einschalten, optional „Von wem". Solange offen, zählt die Ausgabe weder im Budget noch in den Auswertungen.
+- Kommt das Geld, den Eingang der Ausgabe zuordnen (in der Ausgabe oder im Eingang). Er zählt dann nicht als Einnahme und nicht als regelmäßiges Einkommen.
+- Alles zurück: automatisch erledigt. Teilerstattung: „Abschließen" lässt den Rest als echte Ausgabe im Monat der Ausgabe stehen.
+- „Offene Erstattungen" (Budget-Tab und Verlauf) zeigt, wer noch was schuldet. Kontostand und Bargeld-Kasse bleiben unverändert.
+
 ### Kategorisierung
 
 Jede Kategorie hat Schlüsselwörter, die case-insensitive gegen Empfänger, Verwendungszweck und Buchungstext geprüft werden. Bei mehreren Treffern gewinnt die höhere Priorität (Bargeld > gelernte Regeln > Umbuchungen > Standard), danach das längere Schlüsselwort. Wird eine Buchung manuell umkategorisiert, fragt die App, ob daraus eine Regel für den Empfänger werden soll.

@@ -16,9 +16,9 @@ import { font, radius, space, useTheme } from '@/ui/theme';
 export default function BudgetScreen() {
   const t = useTheme();
   const db = useSQLiteContext();
-  const { transactions, categories, categoryById, lookup, reload } = useData();
+  const { transactions, ledger, openReimbursements, categories, categoryById, lookup, reload } = useData();
   const today = todayIso();
-  const b = useMemo(() => computeBudget(transactions, categories, lookup, today), [transactions, categories, lookup, today]);
+  const b = useMemo(() => computeBudget(ledger, categories, lookup, today), [ledger, categories, lookup, today]);
   const [showIncome, setShowIncome] = useState(false);
 
   if (transactions.length === 0) {
@@ -165,6 +165,26 @@ export default function BudgetScreen() {
               Gehört nur die Zahlung zu den Fixkosten, gib ihr besser eine eigene fixe Kategorie (z. B. Abos & Verträge).
             </Text>
           </Card>
+        ) : null}
+
+        {openReimbursements.length > 0 ? (
+          <Pressable
+            onPress={() => router.push('/reimbursements')}
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            accessibilityRole="button"
+          >
+            <Card style={styles.link}>
+              <Icon name="return-down-back-outline" size={18} color={t.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={[font.body, { color: t.text }]}>Offene Erstattungen</Text>
+                <Text style={[font.small, { color: t.textMuted }]}>Nicht im Budget eingerechnet</Text>
+              </View>
+              <Text style={[font.bodyStrong, { color: t.text, fontVariant: ['tabular-nums'] }]}>
+                {formatCents(openReimbursements.reduce((s, r) => s + r.openCents, 0))}
+              </Text>
+              <Icon name="chevron-forward" size={16} color={t.textFaint} />
+            </Card>
+          </Pressable>
         ) : null}
 
         <Pressable
