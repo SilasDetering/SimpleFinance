@@ -34,6 +34,8 @@ import {
   recategorizeAll,
   saveCategory,
   setCategoryBudgetKind,
+  getBudgetStartMonth,
+  setBudgetStartMonth,
   setTransactionCategory,
   linkRepayment,
   setReimbursable,
@@ -97,6 +99,27 @@ describe('Repository', () => {
     const cats = await getCategories(db);
     expect(cats.find((c) => c.id === 'groceries')?.budgetKind).toBe('variable');
     expect(cats.find((c) => c.id === id)?.budgetKind).toBe('saving');
+  });
+
+  it('speichert Planwert und Budget-Neustart, auch im Backup', async () => {
+    expect(await getBudgetStartMonth(db)).toBeNull();
+    const groceries = (await getCategories(db)).find((c) => c.id === 'groceries')!;
+    expect(groceries.plannedCents).toBeNull();
+    await saveCategory(db, { ...groceries, plannedCents: 8000 });
+    await setBudgetStartMonth(db, '2026-10');
+    const backup = await exportBackup(db);
+    await deleteAllData(db);
+    expect(await getBudgetStartMonth(db)).toBeNull();
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.plannedCents).toBeNull();
+    await restoreBackup(db, parseBackup(JSON.stringify(backup)));
+    expect(await getBudgetStartMonth(db)).toBe('2026-10');
+    expect((await getCategories(db)).find((c) => c.id === 'groceries')?.plannedCents).toBe(8000);
+    // Ältere Backups ohne Einstellungen lassen sich weiter einspielen
+    const { settings: _omit, ...old } = backup;
+    await restoreBackup(db, parseBackup(JSON.stringify(old)));
+    expect(await getBudgetStartMonth(db)).toBeNull();
+    await setBudgetStartMonth(db, null);
+    expect(await getBudgetStartMonth(db)).toBeNull();
   });
 
   it('Erstattungen: markieren, zuordnen, abschließen, aufheben, Backup', async () => {

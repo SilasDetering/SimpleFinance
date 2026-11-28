@@ -40,6 +40,8 @@ export interface Category {
   sortOrder: number;
   /** Vom Nutzer gesetzte Budget-Rolle; null = Standard (siehe budgetKindOf) */
   budgetKind?: BudgetKind | null;
+  /** Optionaler Planwert pro Monat in Cent (nur Fixkosten/Sparen). Ersetzt den berechneten Median; null = automatisch */
+  plannedCents?: number | null;
 }
 
 /** Felder einer Buchung, gegen die eine Regel geprüft wird. */

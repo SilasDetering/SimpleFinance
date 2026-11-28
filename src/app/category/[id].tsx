@@ -4,7 +4,9 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '@/domain/defaults';
 import { LEARNED_PRIORITY } from '@/domain/categorize';
-import { budgetKindOf, budgetKindsFor } from '@/domain/budget';
+import { budgetKindOf, budgetKindsFor, computeBudget } from '@/domain/budget';
+import { todayIso } from '@/domain/dates';
+import { formatCents, parseGermanAmount } from '@/domain/money';
 import type { BudgetKind, CategoryType, Rule, RuleField } from '@/domain/types';
 import { addRule, deleteCategory, deleteRule, recategorizeAll, saveCategory } from '@/db/repo';
 import { BudgetKindSegment } from '@/ui/BudgetKindSegment';
@@ -27,7 +29,7 @@ export default function CategoryEditor() {
   const isNew = id === 'new';
   const t = useTheme();
   const db = useSQLiteContext();
-  const { categoryById, rules, transactions, reload } = useData();
+  const { categoryById, categories, lookup, budgetStartMonth, rules, transactions, ledger, reload } = useData();
   const existing = isNew ? undefined : categoryById.get(id);
 
   const [name, setName] = useState(existing?.name ?? '');
@@ -38,6 +40,19 @@ export default function CategoryEditor() {
   const [budgetKind, setBudgetKind] = useState<BudgetKind | null>(existing?.budgetKind ?? null);
   const draftCategory = { id: existing?.id ?? 'new', type, name, budgetKind };
   const budgetKinds = budgetKindsFor(draftCategory);
+  const draftKind = budgetKindOf(draftCategory);
+  const canPlan = draftKind === 'fixed' || draftKind === 'saving';
+  // Leer = automatisch berechnen (Median der letzten Monate)
+  const [plannedText, setPlannedText] = useState(
+    existing?.plannedCents != null ? formatCents(existing.plannedCents, { currency: false }) : '',
+  );
+  // Berechneter Betrag ohne Planwert, als Vergleich unter dem Eingabefeld
+  const computedCents = useMemo(() => {
+    if (!existing || !canPlan) return null;
+    const cats = categories.map((c) => (c.id === existing.id ? { ...c, budgetKind: draftKind, plannedCents: null } : c));
+    const b = computeBudget(ledger, cats, lookup, todayIso(), { startMonth: budgetStartMonth });
+    return [...b.fixed, ...b.saving].find((c) => c.categoryId === existing.id)?.totalCents ?? 0;
+  }, [existing, canPlan, categories, draftKind, ledger, lookup, budgetStartMonth]);
   const initialRules = useMemo<DraftRule[]>(
     () => (existing ? rules.filter((r) => r.categoryId === existing.id).sort((a, b) => a.keyword.localeCompare(b.keyword)) : []),
     [existing, rules],
@@ -67,10 +82,18 @@ export default function CategoryEditor() {
       Alert.alert('Name fehlt', 'Bitte gib der Kategorie einen Namen.');
       return;
     }
+    let plannedCents: number | null = null;
+    if (canPlan && plannedText.trim()) {
+      plannedCents = parseGermanAmount(plannedText);
+      if (plannedCents === null || plannedCents < 0) {
+        Alert.alert('Planwert ungültig', 'Bitte gib einen Betrag wie 80 oder 80,50 ein oder lass das Feld leer.');
+        return;
+      }
+    }
     if (saving.current) return;
     saving.current = true;
     try {
-      const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type, budgetKind });
+      const categoryId = await saveCategory(db, { id: existing?.id, name: name.trim(), color, icon, type, budgetKind, plannedCents });
       const keep = new Set(draftRules.filter((r) => r.id).map((r) => r.id));
       for (const r of initialRules) if (r.id && !keep.has(r.id)) await deleteRule(db, r.id);
       for (const r of draftRules) if (!r.id) await addRule(db, { categoryId, keyword: r.keyword, field: r.field, priority: r.priority });
@@ -166,6 +189,25 @@ export default function CategoryEditor() {
                   : budgetKindOf(draftCategory) === 'variable'
                     ? 'Sonderausgabe: wird aus dem freien Budget bezahlt.'
                     : 'Spielt im Budget keine Rolle.'}
+            </Text>
+          </Field>
+        ) : null}
+
+        {canPlan ? (
+          <Field label="Planwert pro Monat (optional)">
+            <TextInput
+              value={plannedText}
+              onChangeText={setPlannedText}
+              placeholder="Automatisch"
+              placeholderTextColor={t.textFaint}
+              keyboardType="decimal-pad"
+              style={[font.body, styles.input, { color: t.text, backgroundColor: t.surface }]}
+              accessibilityLabel="Planwert pro Monat in Euro"
+            />
+            <Text style={[font.small, { color: t.textMuted }]}>
+              {plannedText.trim()
+                ? 'Ersetzt den berechneten Betrag im Budget. Feld leeren, um wieder automatisch zu rechnen.'
+                : `Leer lassen, dann rechnet die App aus deinen letzten Monaten${computedCents !== null ? ` (aktuell ${formatCents(computedCents)})` : ''}.`}
             </Text>
           </Field>
         ) : null}

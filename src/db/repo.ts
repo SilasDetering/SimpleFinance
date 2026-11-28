@@ -93,6 +93,7 @@ interface CategoryRow {
   is_system: number;
   sort_order: number;
   budget_kind: BudgetKind | null;
+  planned_cents: number | null;
 }
 
 const mapCategory = (r: CategoryRow): Category => ({
@@ -104,6 +105,7 @@ const mapCategory = (r: CategoryRow): Category => ({
   isSystem: !!r.is_system,
   sortOrder: r.sort_order,
   budgetKind: r.budget_kind ?? null,
+  plannedCents: r.planned_cents ?? null,
 });
 
 interface RuleRow {
@@ -136,18 +138,19 @@ export async function saveCategory(
   c: Omit<Category, 'id' | 'isSystem' | 'sortOrder'> & { id?: string },
 ): Promise<string> {
   const kind = c.budgetKind ?? null;
+  const planned = c.plannedCents ?? null;
   if (c.id) {
     await db.runAsync(
-      'UPDATE categories SET name = ?, color = ?, icon = ?, type = CASE WHEN is_system = 1 THEN type ELSE ? END, budget_kind = ? WHERE id = ?',
-      c.name, c.color, c.icon, c.type, kind, c.id,
+      'UPDATE categories SET name = ?, color = ?, icon = ?, type = CASE WHEN is_system = 1 THEN type ELSE ? END, budget_kind = ?, planned_cents = ? WHERE id = ?',
+      c.name, c.color, c.icon, c.type, kind, planned, c.id,
     );
     return c.id;
   }
   const id = newId();
   const max = await db.getFirstAsync<{ m: number | null }>('SELECT MAX(sort_order) AS m FROM categories WHERE is_system = 0');
   await db.runAsync(
-    'INSERT INTO categories (id, name, color, icon, type, is_system, sort_order, budget_kind) VALUES (?, ?, ?, ?, ?, 0, ?, ?)',
-    id, c.name, c.color, c.icon, c.type, (max?.m ?? 0) + 1, kind,
+    'INSERT INTO categories (id, name, color, icon, type, is_system, sort_order, budget_kind, planned_cents) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)',
+    id, c.name, c.color, c.icon, c.type, (max?.m ?? 0) + 1, kind, planned,
   );
   return id;
 }
@@ -155,6 +158,24 @@ export async function saveCategory(
 /** Setzt die Rolle einer Kategorie im Monatsbudget (fix, variabel, Sparen …). */
 export async function setCategoryBudgetKind(db: SQLiteDatabase, id: string, kind: BudgetKind | null): Promise<void> {
   await db.runAsync('UPDATE categories SET budget_kind = ? WHERE id = ?', kind, id);
+}
+
+/* ---------- Einstellungen ---------- */
+
+const SETTING_BUDGET_START = 'budget_start_month';
+
+/** Neustart-Monat des Budgets (YYYY-MM) oder null = alle Daten. */
+export async function getBudgetStartMonth(db: SQLiteDatabase): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string | null }>('SELECT value FROM settings WHERE id = ?', SETTING_BUDGET_START);
+  return row?.value && /^\d{4}-\d{2}$/.test(row.value) ? row.value : null;
+}
+
+export async function setBudgetStartMonth(db: SQLiteDatabase, month: string | null): Promise<void> {
+  if (month) {
+    await db.runAsync('INSERT OR REPLACE INTO settings (id, value) VALUES (?, ?)', SETTING_BUDGET_START, month);
+  } else {
+    await db.runAsync('DELETE FROM settings WHERE id = ?', SETTING_BUDGET_START);
+  }
 }
 
 /** Löscht eine Kategorie. Systemkategorien (Bargeld, Sonstiges) sind geschützt. Buchungen werden neu kategorisiert. */
@@ -485,6 +506,7 @@ export async function exportBackup(db: SQLiteDatabase): Promise<BackupFile> {
     transactions: await db.getAllAsync<BackupRow>('SELECT * FROM transactions'),
     prompt_exclusions: await db.getAllAsync<BackupRow>('SELECT * FROM prompt_exclusions'),
     deleted_transactions: await db.getAllAsync<BackupRow>('SELECT * FROM deleted_transactions'),
+    settings: await db.getAllAsync<BackupRow>('SELECT * FROM settings'),
   };
 }
 
@@ -501,7 +523,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
   }
   await inTransaction(db, async () => {
     await db.execAsync(
-      'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions;',
+      'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions; DELETE FROM settings;',
     );
     // Reihenfolge wegen Fremdschlüsseln: Konten, Kategorien, Regeln, Importe, Buchungen
     for (const table of BACKUP_TABLES) {
@@ -529,7 +551,7 @@ export async function restoreBackup(db: SQLiteDatabase, backup: BackupFile): Pro
 /** Löscht alle Buchungen, Importe, Regeln und eigenen Kategorien und stellt die Defaults wieder her. */
 export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
   await inTransaction(db, async () => {
-    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions; UPDATE accounts SET iban = NULL;');
+    await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM categories; DELETE FROM prompt_exclusions; DELETE FROM deleted_transactions; DELETE FROM settings; UPDATE accounts SET iban = NULL;');
     await seedDefaultCategories(db);
   });
 }

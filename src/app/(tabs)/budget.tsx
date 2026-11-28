@@ -4,10 +4,11 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { computeBudget, type PlannedCategory } from '@/domain/budget';
-import { formatMonth, formatMonthShort, todayIso } from '@/domain/dates';
+import { addMonths, formatMonth, formatMonthShort, monthKey, todayIso } from '@/domain/dates';
 import { formatCents, formatPercent } from '@/domain/money';
 import { CATEGORY_OTHER } from '@/domain/types';
-import { setCategoryBudgetKind } from '@/db/repo';
+import { setBudgetStartMonth, setCategoryBudgetKind } from '@/db/repo';
+import { BottomSheet } from '@/ui/BottomSheet';
 import { Card, CategoryBadge, Divider, Icon, SectionTitle } from '@/ui/components';
 import { useData } from '@/ui/DataProvider';
 import { font, radius, space, useTheme } from '@/ui/theme';
@@ -16,10 +17,14 @@ import { font, radius, space, useTheme } from '@/ui/theme';
 export default function BudgetScreen() {
   const t = useTheme();
   const db = useSQLiteContext();
-  const { transactions, ledger, openReimbursements, categories, categoryById, lookup, reload } = useData();
+  const { transactions, ledger, openReimbursements, categories, categoryById, lookup, budgetStartMonth, reload } = useData();
   const today = todayIso();
-  const b = useMemo(() => computeBudget(ledger, categories, lookup, today), [ledger, categories, lookup, today]);
+  const b = useMemo(
+    () => computeBudget(ledger, categories, lookup, today, { startMonth: budgetStartMonth }),
+    [ledger, categories, lookup, today, budgetStartMonth],
+  );
   const [showIncome, setShowIncome] = useState(false);
+  const [showStart, setShowStart] = useState(false);
 
   if (transactions.length === 0) {
     return (
@@ -52,6 +57,18 @@ export default function BudgetScreen() {
       Alert.alert('Speichern fehlgeschlagen', e instanceof Error ? e.message : String(e));
     }
   };
+
+  const chooseStart = async (month: string | null) => {
+    setShowStart(false);
+    try {
+      await setBudgetStartMonth(db, month);
+      await reload();
+    } catch (e) {
+      Alert.alert('Speichern fehlgeschlagen', e instanceof Error ? e.message : String(e));
+    }
+  };
+  // Auswahl: laufender Monat und die 23 davor, neueste zuerst
+  const startOptions = Array.from({ length: 24 }, (_, i) => addMonths(monthKey(today), -i));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
@@ -199,12 +216,51 @@ export default function BudgetScreen() {
           </Card>
         </Pressable>
 
+        <Pressable
+          onPress={() => setShowStart(true)}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          accessibilityRole="button"
+        >
+          <Card style={styles.link}>
+            <Icon name="refresh-outline" size={18} color={t.text} />
+            <Text style={[font.body, { color: t.text, flex: 1 }]}>Neustart ab</Text>
+            <Text style={[font.body, { color: t.textMuted }]}>{b.startMonth ? formatMonth(b.startMonth) : 'Aus'}</Text>
+            <Icon name="chevron-forward" size={16} color={t.textFaint} />
+          </Card>
+        </Pressable>
+
         <Text style={[font.small, { color: t.textFaint, textAlign: 'center' }]}>
-          Grundlage: {range} (typischer Monat, Median). Größere Einmalbeträge bei Fixkosten und Sparen werden auf 12
+          {b.startMonth ? `Neustart ab ${formatMonth(b.startMonth)}, ältere Monate zählen nicht. ` : ''}
+          Grundlage: {range || 'noch keine Buchungen'} (typischer Monat, Median). Größere Einmalbeträge bei Fixkosten und Sparen werden auf 12
           Monate umgelegt.
           {b.irregularIncomeCents > 0 ? ` Sonderzahlungen (${formatCents(b.irregularIncomeCents)}) sind nicht eingeplant.` : ''}
         </Text>
       </ScrollView>
+
+      <BottomSheet visible={showStart} onClose={() => setShowStart(false)} title="Neustart ab">
+        <Text style={[font.small, { color: t.textMuted, marginBottom: space.sm }]}>
+          Hat sich dein Leben geändert (Umzug, neuer Job, Studium)? Dann rechnet das Budget nur noch mit Monaten ab hier.
+        </Text>
+        <ScrollView>
+          {[null, ...startOptions].map((m) => {
+            const selected = m === b.startMonth;
+            return (
+              <Pressable
+                key={m ?? 'none'}
+                onPress={() => chooseStart(m)}
+                style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+              >
+                <Text style={[selected ? font.bodyStrong : font.body, { color: t.text, flex: 1 }]}>
+                  {m ? formatMonth(m) : 'Kein Neustart (alle Monate)'}
+                </Text>
+                {selected ? <Icon name="checkmark" size={18} color={t.text} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -243,7 +299,9 @@ function Group({
               <Text style={[font.body, { color: t.text }]} numberOfLines={1}>
                 {catName(c.categoryId)}
               </Text>
-              {c.spreadCents > 0 ? (
+              {c.planned ? (
+                <Text style={[font.small, { color: t.textMuted }]}>Planwert</Text>
+              ) : c.spreadCents > 0 ? (
                 <Text style={[font.small, { color: t.textMuted }]}>davon {formatCents(c.spreadCents)} umgelegt</Text>
               ) : null}
             </View>

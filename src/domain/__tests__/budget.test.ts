@@ -82,13 +82,13 @@ describe('computeBudget', () => {
     expect(byId.housing.totalCents).toBe(90000);
     expect(byId.groceries.totalCents).toBe(20000);
     expect(byId.subscriptions.totalCents).toBe(1299);
-    expect(byId.insurance).toEqual({ categoryId: 'insurance', baseCents: 0, spreadCents: 1000, totalCents: 1000 });
+    expect(byId.insurance).toEqual({ categoryId: 'insurance', baseCents: 0, spreadCents: 1000, totalCents: 1000, planned: false });
     expect(b.fixedCents).toBe(90000 + 20000 + 1299 + 1000);
     expect(b.fixed.some((f) => f.categoryId === 'cash' || f.categoryId === 'shopping')).toBe(false);
   });
 
   it('zieht Sparen ab und berechnet das freie Budget', () => {
-    expect(b.saving).toEqual([{ categoryId: 'transfer', baseCents: 30000, spreadCents: 0, totalCents: 30000 }]);
+    expect(b.saving).toEqual([{ categoryId: 'transfer', baseCents: 30000, spreadCents: 0, totalCents: 30000, planned: false }]);
     expect(b.savingCents).toBe(30000);
     expect(b.freeCents).toBe(250000 - 112299 - 30000);
     expect(b.savingsRate).toBeCloseTo(0.12);
@@ -115,5 +115,51 @@ describe('computeBudget', () => {
     const only = computeBudget([e('2026-12-01', 250000, 'income', 'AG')], baseCategories, lookup, '2026-12-10');
     expect(only.months).toEqual(['2026-12']);
     expect(only.incomeCents).toBe(250000);
+  });
+
+  it('nimmt einen Planwert statt des berechneten Betrags', () => {
+    const cats = baseCategories.map((c) =>
+      c.id === 'groceries' ? { ...c, plannedCents: 8000 } : c.id === 'insurance' ? { ...c, plannedCents: 0 } : c,
+    );
+    const b2 = computeBudget([...regular, ...extras], cats, lookup, '2026-12-10');
+    const byId = Object.fromEntries(b2.fixed.map((f) => [f.categoryId, f]));
+    expect(byId.groceries).toEqual({ categoryId: 'groceries', baseCents: 8000, spreadCents: 0, totalCents: 8000, planned: true });
+    // Planwert 0 nimmt die Kategorie aus dem Budget
+    expect(byId.insurance).toBeUndefined();
+    expect(b2.fixedCents).toBe(90000 + 8000 + 1299);
+    expect(b2.freeCents).toBe(250000 - 99299 - 30000);
+  });
+
+  it('plant auch Kategorien ohne Buchungen ein, aber keine variablen', () => {
+    const cats = baseCategories.map((c) =>
+      c.id === 'health' ? { ...c, budgetKind: 'fixed' as const, plannedCents: 3000 } : c.id === 'shopping' ? { ...c, plannedCents: 5000 } : c,
+    );
+    const b2 = computeBudget([...regular, ...extras], cats, lookup, '2026-12-10');
+    expect(b2.fixed.find((f) => f.categoryId === 'health')?.totalCents).toBe(3000);
+    expect(b2.fixed.some((f) => f.categoryId === 'shopping')).toBe(false);
+  });
+
+  it('ignoriert ohne Neustart nichts und mit Neustart alle älteren Monate', () => {
+    expect(computeBudget([...regular, ...extras], baseCategories, lookup, '2026-12-10', { startMonth: null })).toEqual(b);
+    // Masterstudium ab Oktober: vorher kaum Lebensmittel, jetzt 80 € im Monat
+    const abroad = ms.slice(0, 4).map((m) => e(`${m}-20`, -550, 'groceries', 'Kiosk'));
+    const semester = ['2026-10', '2026-11'].map((m) => e(`${m}-20`, -8000, 'groceries', 'REWE'));
+    const data = [...regular.filter((x) => x.categoryId !== 'groceries'), ...abroad, ...semester];
+    const before = computeBudget(data, baseCategories, lookup, '2026-12-10');
+    expect(before.fixed.find((f) => f.categoryId === 'groceries')?.baseCents).toBe(550);
+    const after = computeBudget(data, baseCategories, lookup, '2026-12-10', { startMonth: '2026-10' });
+    expect(after.startMonth).toBe('2026-10');
+    expect(after.months).toEqual(['2026-10', '2026-11']);
+    expect(after.fixed.find((f) => f.categoryId === 'groceries')?.totalCents).toBe(8000);
+    // Jahresbeitrag aus September zählt nach dem Neustart nicht mehr
+    expect(after.fixed.some((f) => f.categoryId === 'insurance')).toBe(false);
+  });
+
+  it('zeigt nach einem Neustart ohne neue Buchungen nur Planwerte', () => {
+    const cats = baseCategories.map((c) => (c.id === 'housing' ? { ...c, plannedCents: 40000 } : c));
+    const b2 = computeBudget([...regular], cats, lookup, '2026-12-10', { startMonth: '2027-01' });
+    expect(b2.months).toEqual([]);
+    expect(b2.fixedCents).toBe(40000);
+    expect(b2.freeCents).toBe(-40000);
   });
 });

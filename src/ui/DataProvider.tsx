@@ -4,7 +4,7 @@ import { cashBalance, toLookup, type CategoryLookup } from '@/domain/cash';
 import { ACCOUNT_GIRO, type Category, type Rule, type Transaction } from '@/domain/types';
 import type { PromptExclusion } from '@/domain/categorize';
 import { applyReimbursements, openReimbursements, reimbursements, type Reimbursement } from '@/domain/reimburse';
-import { getBankBalance, getCategories, getPromptExclusions, getRules, getTransactions } from '@/db/repo';
+import { getBankBalance, getBudgetStartMonth, getCategories, getPromptExclusions, getRules, getTransactions } from '@/db/repo';
 
 /**
  * Hält alle Daten im Speicher. Für ein privates Haushaltsbuch (einige tausend Buchungen)
@@ -31,6 +31,8 @@ interface DataState {
   promptExclusions: PromptExclusion[];
   bankBalance: { cents: number; asOf: string } | null;
   cashBalanceCents: number;
+  /** Budget-Neustart (YYYY-MM): ältere Monate zählen nicht; null = alle */
+  budgetStartMonth: string | null;
   reload: () => Promise<void>;
 }
 
@@ -44,6 +46,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [rules, setRules] = useState<Rule[]>([]);
   const [promptExclusions, setPromptExclusions] = useState<PromptExclusion[]>([]);
   const [bankBalance, setBankBalance] = useState<DataState['bankBalance']>(null);
+  const [budgetStartMonth, setBudgetStartMonth] = useState<string | null>(null);
 
   // Laufen zwei Ladevorgänge gleichzeitig (z. B. Kategorie geändert und direkt Regel angelegt),
   // darf der ältere nicht nach dem neueren fertig werden und frische Daten überschreiben
@@ -51,12 +54,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const reload = useCallback(async () => {
     const load = ++latestLoad.current;
-    const [tx, cats, rs, bal, excl] = await Promise.all([
+    const [tx, cats, rs, bal, excl, start] = await Promise.all([
       getTransactions(db),
       getCategories(db),
       getRules(db),
       getBankBalance(db, ACCOUNT_GIRO),
       getPromptExclusions(db),
+      getBudgetStartMonth(db),
     ]);
     if (load !== latestLoad.current) return;
     setPromptExclusions(excl);
@@ -64,6 +68,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCategories(cats);
     setRules(rs);
     setBankBalance(bal);
+    setBudgetStartMonth(start);
     setLoading(false);
   }, [db]);
 
@@ -93,9 +98,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       promptExclusions,
       bankBalance,
       cashBalanceCents,
+      budgetStartMonth,
       reload,
     }),
-    [loading, transactions, ledger, reimbursementById, open, categories, categoryById, lookup, rules, promptExclusions, bankBalance, cashBalanceCents, reload],
+    [loading, transactions, ledger, reimbursementById, open, categories, categoryById, lookup, rules, promptExclusions, bankBalance, cashBalanceCents, budgetStartMonth, reload],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

@@ -125,6 +125,16 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
       );
     `);
   },
+  // v8: optionaler Planwert pro Kategorie (Cent, NULL = berechnen) und Einstellungen (z. B. Budget-Neustart)
+  async (db) => {
+    await db.execAsync(`
+      ALTER TABLE categories ADD COLUMN planned_cents INTEGER;
+      CREATE TABLE settings (
+        id TEXT PRIMARY KEY NOT NULL,
+        value TEXT
+      );
+    `);
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {
