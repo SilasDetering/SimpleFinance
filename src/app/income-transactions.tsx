@@ -12,6 +12,7 @@ import { useData } from '@/ui/DataProvider';
 import { TransactionRow } from '@/ui/TransactionRow';
 import { font, space, useTheme } from '@/ui/theme';
 import { useCategoryChange } from '@/ui/useCategoryChange';
+import { useDeleteTransaction } from '@/ui/useDeleteTransaction';
 
 /** Alle Einnahmen im gewählten Zeitraum (aus den Auswertungen, Tipp auf „Einnahmen“). */
 export default function IncomeTransactionsScreen() {
@@ -19,6 +20,7 @@ export default function IncomeTransactionsScreen() {
   const t = useTheme();
   const { transactions, categories, categoryById, lookup } = useData();
   const changeCategory = useCategoryChange();
+  const confirmDelete = useDeleteTransaction();
   const [pickerTx, setPickerTx] = useState<Transaction | null>(null);
 
   const period: Period = month && month !== 'all' ? { kind: 'month', month } : { kind: 'all' };
@@ -43,6 +45,10 @@ export default function IncomeTransactionsScreen() {
     (tx: Transaction) => router.push({ pathname: '/transaction/[id]', params: { id: tx.id } }),
     [],
   );
+  const deleteRow = useCallback(
+    (tx: Transaction, close: () => void) => confirmDelete(tx, { onCancel: close }),
+    [confirmDelete],
+  );
   const renderItem = useCallback(
     ({ item }: { item: Transaction }) => (
       <TransactionRow
@@ -50,9 +56,10 @@ export default function IncomeTransactionsScreen() {
         category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
         onPress={openTransaction}
         onPressCategory={setPickerTx}
+        onDelete={deleteRow}
       />
     ),
-    [categoryById, openTransaction],
+    [categoryById, openTransaction, deleteRow],
   );
 
   const barData = series.map((m) => ({

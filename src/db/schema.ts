@@ -107,6 +107,15 @@ const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
   async (db) => {
     await db.execAsync('ALTER TABLE categories ADD COLUMN budget_kind TEXT;');
   },
+  // v6: gelöschte Import-Buchungen (id = dedup_key), damit ein erneuter Import sie nicht wieder anlegt
+  async (db) => {
+    await db.execAsync(`
+      CREATE TABLE deleted_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        deleted_at TEXT NOT NULL
+      );
+    `);
+  },
 ];
 
 export async function seedDefaultCategories(db: SQLiteDatabase): Promise<void> {
